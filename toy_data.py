@@ -3,7 +3,7 @@ import os
 from pyannote.audio import Pipeline
 import torch
 import requests
-from pytube import YouTube
+from pytubefix import YouTube
 from pydub import AudioSegment
 
 # Define the token and URL
