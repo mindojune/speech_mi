@@ -122,6 +122,42 @@ class MyTrainer:
             encoding["audio_attention_mask"] = audio_attention_mask 
     
         # TODO: need to think about the padding / truncation side
+        # Now the batch contains
+        #  input_ids, attention_mask, input_features, audio_attention_mask
+        # input_ids and attention_mask are for the text
+        # input_features and audio_attention_mask are for the audio
+        # Now, reshape the features so that they can be concatenated
+        # (text, audio) along the sequence dimension
+        # padding / truncation should be done on the left side.
+
+        # Get the lengths of the text and audio sequences
+        text_lengths = encoding["attention_mask"].sum(dim=1)
+        audio_lengths = encoding["audio_attention_mask"].sum(dim=1)
+
+        # Calculate the total length after concatenation
+        total_lengths = text_lengths + audio_lengths
+
+        # Create a new tensor to hold the concatenated sequences
+        max_length = total_lengths.max().item()
+        input_ids_padded = torch.full((len(batch["inputs"]), max_length), self.tokenizer.pad_token_id, dtype=torch.long)
+        attention_mask_padded = torch.zeros((len(batch["inputs"]), max_length), dtype=torch.long)
+
+        # Fill in the text and audio sequences
+        for i in range(len(batch["inputs"])):
+            # NOTE: no special token between text and audio here
+            text_len = text_lengths[i].item()
+            audio_len = audio_lengths[i].item()
+
+            input_ids_padded[i, :text_len] = encoding["input_ids"][i, :text_len]
+            input_ids_padded[i, text_len:text_len + audio_len] = encoding["input_features"][i, :audio_len]
+
+            attention_mask_padded[i, :text_len] = encoding["attention_mask"][i, :text_len]
+            attention_mask_padded[i, text_len:text_len + audio_len] = encoding["audio_attention_mask"][i, :audio_len]
+
+        # Update the encoding dictionary with the concatenated sequences
+        encoding["input_ids"] = input_ids_padded
+        encoding["attention_mask"] = attention_mask_padded
+
 
         inputs = encoding.to(self.device)
         return inputs      
