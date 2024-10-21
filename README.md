@@ -1,13 +1,7 @@
 # Speech MI - DJ 2024 Fall Project
 
 ## TODOs
-1. topdown design of experiment script
-    - two tasks: classification / forecasting
-    - frameworks:
-        - text only (interleaved text)
-        - text + last utt text & speech (interleaved)
-        
-    
+- write the training code in the loop
     
 ## Model and Framework
 - LLM + Speech Adapter

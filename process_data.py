@@ -37,7 +37,7 @@ def custom_datacollate(batch):
 
     return {"inputs": inputs, "labels": labels, "audio_infos": audio_cue_infos}
 
-def process(args, split=[0.8,0.05,0.15]):
+def process(args, split=[0.8,0.05,0.15], print_examples=False):
     # args = { }
     if args.dataset == "annomi":
         segfile = "data/segmental_information.json"
@@ -116,7 +116,7 @@ def process(args, split=[0.8,0.05,0.15]):
     testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, collate_fn=custom_datacollate)
 
     # TEST SAMPLING FROM DEVLOADER
-    if False:
+    if print_examples:
         for i, batch in enumerate(devloader):
             
             print(i, batch)
@@ -130,6 +130,8 @@ def process(args, split=[0.8,0.05,0.15]):
 if __name__ == "__main__":
     # make a namespace 
     args = { "dataset": "annomi", "task": "classification", "mode": ["train"], "run_name": "run1", "seed": 42, "batch_size": 1 }
+    args = { "dataset": "annomi", "task": "forecasting", "mode": ["train"], "run_name": "run1", "seed": 42, "batch_size": 1 }
+    
     from types import SimpleNamespace   
     args = SimpleNamespace(**args)
-    process(args)
+    process(args, print_examples=True)

@@ -1,15 +1,22 @@
 import argparse
 import os
 import logging
+from tqdm.auto import tqdm
 
-from process_data import process # TODO
-from log_writer import LogWriter 
-from audio_encoder import AudioEncoder
 
+from transformers import AutoProcessor, AutoTokenizer, AutoModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from omegaconf import OmegaConf
 
+import random, audiofile, audresample
+import numpy as np
+from torch.nn.utils.rnn import pad_sequence
+
+from process_data import process # TODO
+from log_writer import LogWriter 
+from audio_encoder import AudioEncoder
+from utils import set_all_seeds, create_attention_mask, compute_num_audio_embeds
 
 class MyTrainer:
     def __init__(self, args):
@@ -28,6 +35,7 @@ class MyTrainer:
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.audio_encoder = AudioEncoder(self.config)
         self.model.to(self.device)
+        self.feature_extractor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
         # Setup Training Parameters
@@ -58,11 +66,6 @@ class MyTrainer:
         logging.basicConfig(filename=os.path.join(log_dir, 'experiment.log'), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         logging.info('Logging setup complete.')
 
-    def set_seed(self):
-        torch.manual_seed(self.args.seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(self.args.seed)
-        logging.info(f"Random seed set to {self.args.seed}")
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -80,9 +83,56 @@ class MyTrainer:
 
         print(f"Loaded checkpoint from {checkpoint_path}.\n")
 
+    def prepare_batch(self, batch):
+        # {'inputs': ["client: Dr. Morrow, I'm so relieved I'm not pregnant.\ntherapist: Huh, you feel like you dodged the bullet."], 
+        # 'labels': ['neutral'], 
+        # 'audio_infos': [{'audio_path': './data/session_audios/high_129.wav', 'begin': '00:00:39', 'end': '00:00:41'}]}
+
+        # first encode the text into embeddings
+        # then embedd the audio using the audio encoder
+        #   the audio is spliced from the audio path, begin, and end
+        # concatenate the two types of embeddings, along the sequence dimension
+        # TODO: fix the following
+        encoding = self.tokenizer(batch["inputs"], return_tensors="pt", padding="longest", truncation=True, max_length=512)
+
+        if self.args.mode == "speech":
+            audio_paths = [x["audio_path"] for x in batch]
+            
+            audio_features = []
+            for idx, fname in enumerate(audio_paths):
+
+                signal, source_rate = audiofile.read(fname)
+                signal = audresample.resample(signal, source_rate, 16000)
+                audio = signal.squeeze()
+                if self.args.max_audio_s:
+                    audio = audio[:self.args.max_audio_s*16000]  
+                # turn 'begin': '00:00:39', 'end': '00:00:41' into seconds
+                begin_time = sum(x * int(t) for x, t in zip([3600, 60, 1], fname["begin"].split(":")))
+                end_time = sum(x * int(t) for x, t in zip([3600, 60, 1], fname["end"].split(":")))
+                audio = audio[begin_time * 16000:end_time * 16000]
+                audio_feature = self.feature_extractor(audio, sampling_rate=16000, return_tensors="pt", padding="longest", return_attention_mask=True )
+                audio_features += [audio_feature]
+
+            feat_lens = ([ len(x.input_values[0]) for x in audio_features])
+            features = pad_sequence([torch.Tensor(x.input_values[0]) for x in audio_features], batch_first=True)
+
+            audio_attention_mask = create_attention_mask(feat_lens)
+
+            encoding["input_features"] = features 
+            encoding["audio_attention_mask"] = audio_attention_mask 
+    
+        # TODO: need to think about the padding / truncation side
+
+        inputs = encoding.to(self.device)
+        return inputs      
+
+
+        return 
+
     def run_experiment(self):
         self.setup_logging()
-        self.set_seed()
+        # self.set_seed()
+        set_all_seeds(self.args.seed)
 
         logging.info(f"Running experiment with the following parameters:")
         logging.info(f"Learning Rate: {self.args.learning_rate}")
@@ -93,7 +143,10 @@ class MyTrainer:
         logging.info(f"Task: {self.args.task}")
         logging.info(f"Mode: {self.args.mode}")
 
-        self.data = process(self.args)
+        self.dataloaders = process(self.args)
+        self.trainloader = self.data["train"]
+        self.valloader = self.data["val"]
+        self.testloader = self.data["test"]
 
         if 'train' in self.args.mode:
             self.train()
@@ -103,13 +156,26 @@ class MyTrainer:
 
     def train(self):
         logging.info("Running in train mode")
-        for epoch in range(self.args.epochs):
-            logging.info(f"Epoch {epoch+1}/{self.args.epochs}")
-            # Training and validation logic here
+        scaler = torch.cuda.amp.GradScaler()
+        for epoch in range(self.start_epoch, self.start_epoch+self.num_epochs):
+            print(f"Epoch {epoch}")
+            logging.info(f"Epoch {epoch}/{self.args.epochs}")
+
+            # Training loop.
+            self.audio_encoder.train()
+            self.optimizer.zero_grad()
+
+            with tqdm(self.train_dataloader, unit="batch") as tepoch:
+                for batch_idx, batch in enumerate(tepoch):
+                    with torch.autocast(device_type='cuda', dtype=torch.float16):
+                        pass
+
+            
+            # TODO: Training and validation logic here
 
     def test(self):
         logging.info("Running in test mode")
-        # Add your testing logic here
+        # TODO: Add your testing logic here
 
 
 def parse_arguments():
@@ -127,7 +193,7 @@ def parse_arguments():
     parser.add_argument('--grad_accum_interval', type=int, default=16, help='Gradient accumulation interval')
     parser.add_argument('--checkpoint_path', type=str, help='Path to the checkpoint to resume training')
     parser.add_argument('--mode', type=str, choices=['speech', 'text'], required=True, help='Data mode to use (speech or text)')
-
+    parser.add_argument('--max_audio_s', default=100, type=int, help='Maximum number of seconds to use for audio')
     args = parser.parse_args()
     return args
 
