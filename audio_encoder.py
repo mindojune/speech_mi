@@ -8,9 +8,9 @@ class AudioEncoder(nn.Module):
         super(AudioEncoder, self).__init__()
         self.config = config
 
-        # self.random_range = 0.5
-        # init_value = torch.FloatTensor(1, self.config.model.llm_embedding_channels).uniform_(-self.random_range, self.random_range)
-        # self.eos_embedding = torch.nn.parameter.Parameter(init_value)
+        self.random_range = 0.5
+        init_value = torch.FloatTensor(1, self.config.model.llm_embedding_channels).uniform_(-self.random_range, self.random_range)
+        self.eos_embedding = torch.nn.parameter.Parameter(init_value)
 
         self.encoder = AutoModel.from_pretrained(self.config.model.audio_encoder.type)
 
