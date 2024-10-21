@@ -1,5 +1,6 @@
-import argparse
 import os
+os.environ['HF_HOME'] = '/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/.cache'
+import argparse
 import logging
 from tqdm.auto import tqdm
 
@@ -163,6 +164,8 @@ class MyTrainer:
 
 
     def embed_audio_and_concatenate(self, batch):
+        if self.args.mode == "text":
+            return batch["input_ids"], batch["attention_mask"]
         padded_audios = batch["input_features"]
         padded_audios = padded_audios.to(self.device)
 
