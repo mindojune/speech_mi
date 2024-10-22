@@ -21,6 +21,7 @@ from audio_encoder import AudioEncoder
 from audio_llama import AudioLlamaForCausalLM
 from utils import set_all_seeds, create_attention_mask, compute_num_audio_embeds
 import librosa
+from peft import PeftConfig, PeftModel
 
 # Import LoRA
 from peft import get_peft_model, LoraConfig, TaskType
@@ -41,7 +42,16 @@ class MyTrainer:
             torch_dtype=self.datatype,
         ).eval()
 
-        if args.use_lora:
+        if args.lora_checkpoint_path:
+            # lora_config = PeftConfig.from_pretrained(args.lora_checkpoint_path)
+            # self.model = get_peft_model(self.model, lora_config)
+            # peft_config = PeftConfig.from_pretrained(self.args.lora_checkpoint_path)
+            # self.model.load_from_checkpoint(self.args.lora_checkpoint_path)
+            self.model = PeftModel.from_pretrained(self.model, self.args.lora_checkpoint_path, is_trainable=True)
+            logging.info(f"Loaded LoRA checkpoint from {self.args.lora_checkpoint_path}.\n")
+            self.model.print_trainable_parameters()
+            # logging.info("LoRA module loaded.")
+        elif args.use_lora:
             lora_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
                 r=8,
@@ -125,12 +135,16 @@ class MyTrainer:
                     if torch.is_tensor(v):
                         state[k] = v.cuda(self.args.gpu_idx)
 
-        print(f"Loaded checkpoint from {checkpoint_path}.\n")
+        logging.info(f"Loaded checkpoint from {checkpoint_path}.\n")
 
         # lora load_from_checkpoint
-        if self.args.use_lora:
-            self.model.load_from_checkpoint(self.args.lora_checkpoint_path)
-            logging.info("Loaded LoRA checkpoint.")
+        # if self.args.use_lora:
+        #     # peft_config = PeftConfig.from_pretrained(self.args.lora_checkpoint_path)
+        #     # self.model.load_from_checkpoint(self.args.lora_checkpoint_path)
+        #     # self.model = PeftModel.from_pretrained(self.model, self.args.lora_checkpoint_path)
+        #     self.model = 
+        #     logging.info(f"Loaded LoRA checkpoint from {self.args.lora_checkpoint_path}.\n")
+
 
     def prepare_batch(self, batch):
         encoding = self.tokenizer(batch["inputs"], return_tensors="pt", padding="longest", truncation=True, max_length=512)
@@ -365,11 +379,15 @@ class MyTrainer:
             },
             save_path,
         )
+        logging.info(f"Saved checkpoint for epoch {epoch} to {save_path}.\n")
         # peft save
         if self.args.use_lora:
+            lora_save_path = os.path.join(self.args.save_dir, "experiment", self.args.run_name, f"lora_checkpoint_epoch_{epoch}_step_{self.step}")
             #self.model.save_pretrained(os.path.join("experiment", self.args.run_name, f"lora_checkpoint_epoch_{epoch}_step_{self.step}"))
-            self.model.save_pretrained(os.path.join(self.args.save_dir, "experiment", self.args.run_name, f"lora_checkpoint_epoch_{epoch}_step_{self.step}"))
-        logging.info(f"Saved checkpoint for epoch {epoch} to {save_path}.\n")
+            self.model.save_pretrained(lora_save_path)
+            logging.info(f"Saved LoRA checkpoint for epoch {epoch} to {lora_save_path}.\n")
+        
+        
 
 
     def test(self):
@@ -435,6 +453,7 @@ class MyTrainer:
 def parse_arguments():
     parser = argparse.ArgumentParser(description='ML Experiment')
     parser.add_argument('--save_dir', type=str, default='/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/', help='Absolute path of the storage for checkpoints and logs')
+    parser.add_argument('--gpu_idx', type=int, default=0, help='GPU index to use for training')
     parser.add_argument('--learning_rate', type=float, default=5e-5, help='Learning rate for the optimizer')
     parser.add_argument('--optimizer_beta1', type=float, default=0.9, help='Beta1 for the optimizer')
     parser.add_argument('--optimizer_beta2', type=float, default=0.999, help='Beta2 for the optimizer')
