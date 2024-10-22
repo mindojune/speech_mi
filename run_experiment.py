@@ -192,7 +192,8 @@ class MyTrainer:
         return inputs      
 
 
-    def embed_audio_and_concatenate(self, batch):
+    def embed_audio_and_concatenate(self, batch, bsz):
+        BSZ = bsz
         if self.args.use_lora:
             embedded_text = self.model.model.model.embed_tokens(batch["input_ids"])
         else:
@@ -213,7 +214,7 @@ class MyTrainer:
         unpadded_audio_embeds = pad_sequence([torch.cat([torch.Tensor(x[:y-1, :]), self.audio_encoder.eos_embedding],dim=0) for x,y in zip(unpadded_audio_embeds, num_audio_embeds)], batch_first=True).to(unpadded_audio_embeds.device)
         audio_mask = create_attention_mask(num_audio_embeds).to(unpadded_audio_embeds.device)
         
-        BSZ = self.args.batch_size
+        # BSZ = self.args.batch_size
         text_lengths = batch["attention_mask"].sum(dim=1)
         audio_lengths = audio_mask.sum(dim=1)
 
@@ -293,7 +294,7 @@ class MyTrainer:
                 for batch_idx, batch in enumerate(tepoch):
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
-                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs,bsz=self.args.batch_size)
                         response_input_ids = inputs["labels"].to(self.device)
 
                         output = self.model(
@@ -346,9 +347,9 @@ class MyTrainer:
                 with torch.no_grad():
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
-                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs, bsz = self.args.test_batch_size)
                         response_input_ids = inputs["labels"].to(self.device)
-
+                        # print(input_embeds.size(), response_input_ids.size())
                         output = self.model(
                             inputs_embeds=input_embeds,
                             labels=response_input_ids,
@@ -356,14 +357,13 @@ class MyTrainer:
                             attention_mask=attention_mask,
                         )
                         loss = output.loss
-                        vepoch.set_postfix(loss=loss.item())
                         total_loss += loss.item()
                         num_batches += 1
                         vepoch.set_postfix(loss=loss.item())
 
                 self.val_step += 1
                 self.logwriter.log_validation({"loss": loss}, self.val_step)
-
+                # break
         avg_loss = total_loss / num_batches
         logging.info(f"Validation loss after epoch {epoch}: {avg_loss}")
 
@@ -404,7 +404,7 @@ class MyTrainer:
                 with torch.no_grad():
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
-                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs, bsz = self.args.test_batch_size)
                         response_input_ids = inputs["labels"].to(self.device)
 
                         generation_output = self.model.generate(
