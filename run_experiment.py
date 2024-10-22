@@ -9,24 +9,40 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from omegaconf import OmegaConf
 
-import random, audiofile, audresample
+import random
+import audiofile, audresample
+import torchaudio
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 
 from process_data import process # TODO
 from log_writer import LogWriter 
 from audio_encoder import AudioEncoder
+from audio_llama import AudioLlamaForCausalLM
 from utils import set_all_seeds, create_attention_mask, compute_num_audio_embeds
+import librosa
 
 class MyTrainer:
     def __init__(self, args):
         self.args = args
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.datatype = torch.float16 if args.datatype == 'float16' else torch.float32
         self.config = OmegaConf.load(args.config)
+        self.setup_logging()
         self.logwriter = LogWriter(self.config, os.path.join('experiment', args.run_name))
 
         # Setup Model
-        self.model = AutoModelForCausalLM.from_pretrained(args.model)
+        # self.model = AutoModelForCausalLM.from_pretrained(args.model)
+        self.model = AudioLlamaForCausalLM.from_pretrained(
+            args.model,
+            use_cache=True,
+            torch_dtype=self.datatype,
+        ).eval()
+
+        for param in self.model.parameters():
+            param.requires_grad = False
+        logging.info(f"Loaded model {args.model}.")
+
         self.tokenizer = AutoTokenizer.from_pretrained(
             args.model,
             use_fast=False,
@@ -34,27 +50,30 @@ class MyTrainer:
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.audio_encoder = AudioEncoder(self.config)
+        self.audio_encoder.to(self.device)
         self.model.to(self.device)
         self.feature_extractor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
 
+        # Setup Dataloaders
+        self.set_dataloaders()
 
         # Setup Training Parameters
         self.step = 0
         self.val_step = 0
         self.start_epoch = 0
         self.grad_accum_interval = args.grad_accum_interval
-        self.num_epochs = self.config.train.epochs
+        self.num_epochs = self.args.epochs
         self.optimizer = torch.optim.AdamW(
             [
                 {'params': self.audio_encoder.parameters()},
                 {'params': self.model.parameters()}
             ],
-            lr=self.config.train.optimizer.lr,
-            betas=(self.config.train.optimizer.beta1, self.config.train.optimizer.beta2),
+            lr=self.args.learning_rate,
+            betas=(self.args.optimizer_beta1, self.args.optimizer_beta2),
         )
         self.lr_scheduler = torch.optim.lr_scheduler.PolynomialLR(
             self.optimizer,
-            total_iters=(self.num_epochs * len(self.data['train']) // self.grad_accum_interval),
+            total_iters=(self.num_epochs * len(self.trainloader) // self.grad_accum_interval),
             power=1
         )
         if args.checkpoint_path:
@@ -65,6 +84,18 @@ class MyTrainer:
         os.makedirs(log_dir, exist_ok=True)
         logging.basicConfig(filename=os.path.join(log_dir, 'experiment.log'), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         logging.info('Logging setup complete.')
+
+    def set_dataloaders(self):
+        self.dataloaders = process(self.args)
+        self.trainloader = self.dataloaders["train"]
+        self.valloader = self.dataloaders["dev"]
+        self.testloader = self.dataloaders["test"]
+
+        # advance trainloader by 418 so that it starts from 419
+        self.trainloader = iter(self.trainloader)
+        for _ in range(418):
+            next(self.trainloader)
+
 
 
     def load_checkpoint(self, checkpoint_path):
@@ -84,32 +115,35 @@ class MyTrainer:
         print(f"Loaded checkpoint from {checkpoint_path}.\n")
 
     def prepare_batch(self, batch):
-        # {'inputs': ["client: Dr. Morrow, I'm so relieved I'm not pregnant.\ntherapist: Huh, you feel like you dodged the bullet."], 
-        # 'labels': ['neutral'], 
-        # 'audio_infos': [{'audio_path': './data/session_audios/high_129.wav', 'begin': '00:00:39', 'end': '00:00:41'}]}
-
-        # first encode the text into embeddings
-        # then embedd the audio using the audio encoder
-        #   the audio is spliced from the audio path, begin, and end
-        # concatenate the two types of embeddings, along the sequence dimension
-        # TODO: fix the following
         encoding = self.tokenizer(batch["inputs"], return_tensors="pt", padding="longest", truncation=True, max_length=512)
-
-        if self.args.mode == "speech":
-            audio_paths = [x["audio_path"] for x in batch]
+        label_encoding = self.tokenizer(batch["labels"], return_tensors="pt", padding="longest", truncation=True, max_length=512)
+        encoding["labels"] = label_encoding["input_ids"]
+        # pad to -100
+        encoding["labels"] = encoding["labels"].masked_fill(encoding["labels"] == self.tokenizer.pad_token_id, -100)
+        
+        if self.args.modality == "speech":
+            #audio_paths = [x["audio_path"] for x in batch["audio_infos"]]
+            audio_infos = batch["audio_infos"]
             
             audio_features = []
-            for idx, fname in enumerate(audio_paths):
+            for idx, audio_info in enumerate(audio_infos):
+                fname = audio_info["audio_path"]
+                begin = audio_info["begin"]
+                end = audio_info["end"]
 
-                signal, source_rate = audiofile.read(fname)
-                signal = audresample.resample(signal, source_rate, 16000)
+                waveform, sample_rate = torchaudio.load(fname)
+                waveform = audresample.remix(waveform, mixdown=True).squeeze()
+                signal = audresample.resample(waveform, sample_rate, 16000)
                 audio = signal.squeeze()
+
+                # turn 'begin': '00:00:39', 'end': '00:00:41' into seconds
+                begin_time = sum(x * int(t) for x, t in zip([3600, 60, 1], begin.split(":")))
+                end_time = sum(x * int(t) for x, t in zip([3600, 60, 1], end.split(":")))
+
+                audio = audio[begin_time * 16000:end_time * 16000]
                 if self.args.max_audio_s:
                     audio = audio[:self.args.max_audio_s*16000]  
-                # turn 'begin': '00:00:39', 'end': '00:00:41' into seconds
-                begin_time = sum(x * int(t) for x, t in zip([3600, 60, 1], fname["begin"].split(":")))
-                end_time = sum(x * int(t) for x, t in zip([3600, 60, 1], fname["end"].split(":")))
-                audio = audio[begin_time * 16000:end_time * 16000]
+
                 audio_feature = self.feature_extractor(audio, sampling_rate=16000, return_tensors="pt", padding="longest", return_attention_mask=True )
                 audio_features += [audio_feature]
 
@@ -121,65 +155,29 @@ class MyTrainer:
             encoding["input_features"] = features 
             encoding["audio_attention_mask"] = audio_attention_mask 
     
-        # TODO: need to think about the padding / truncation side
-        # Now the batch contains
-        #  input_ids, attention_mask, input_features, audio_attention_mask
-        # input_ids and attention_mask are for the text
-        # input_features and audio_attention_mask are for the audio
-        # Now, reshape the features so that they can be concatenated
-        # (text, audio) along the sequence dimension
-        # padding / truncation should be done on the left side.
 
-        # Get the lengths of the text and audio sequences
-        """
-        text_lengths = encoding["attention_mask"].sum(dim=1)
-        audio_lengths = encoding["audio_attention_mask"].sum(dim=1)
-
-        # Calculate the total length after concatenation
-        total_lengths = text_lengths + audio_lengths
-
-        # Create a new tensor to hold the concatenated sequences
-        max_length = total_lengths.max().item()
-        input_ids_padded = torch.full((len(batch["inputs"]), max_length), self.tokenizer.pad_token_id, dtype=torch.long)
-        attention_mask_padded = torch.zeros((len(batch["inputs"]), max_length), dtype=torch.long)
-
-        # Fill in the text and audio sequences
-        for i in range(len(batch["inputs"])):
-            # NOTE: no special token between text and audio here
-            text_len = text_lengths[i].item()
-            audio_len = audio_lengths[i].item()
-
-            input_ids_padded[i, :text_len] = encoding["input_ids"][i, :text_len]
-            input_ids_padded[i, text_len:text_len + audio_len] = encoding["input_features"][i, :audio_len]
-
-            attention_mask_padded[i, :text_len] = encoding["attention_mask"][i, :text_len]
-            attention_mask_padded[i, text_len:text_len + audio_len] = encoding["audio_attention_mask"][i, :audio_len]
-
-        # Update the encoding dictionary with the concatenated sequences
-        encoding["input_ids"] = input_ids_padded
-        encoding["attention_mask"] = attention_mask_padded
-        """
         inputs = encoding.to(self.device)
         return inputs      
 
 
     def embed_audio_and_concatenate(self, batch):
-        if self.args.mode == "text":
-            return batch["input_ids"], batch["attention_mask"]
+        embedded_text= self.model.model.embed_tokens(batch["input_ids"])
+        if self.args.modality == "text":
+            return embedded_text, batch["attention_mask"]
         padded_audios = batch["input_features"]
         padded_audios = padded_audios.to(self.device)
 
-        # Compute audio embeddings using audio encoder.
+        
         padded_audio_embeds = self.audio_encoder(padded_audios, batch["audio_attention_mask"], None)
 
         unpadded_audio_embeds = padded_audio_embeds
 
         num_audio_embeds = [compute_num_audio_embeds(
-                len_audio, sr=16000
+            len_audio, sr=16000
             ) + 1 for len_audio in torch.sum(batch["audio_attention_mask"], dim=-1).tolist() ]
-        unpadded_audio_embeds = pad_sequence([torch.cat([torch.Tensor(x[:y-1, :]), self.audio_encoder.module.eos_embedding],dim=0) for x,y in zip(unpadded_audio_embeds, num_audio_embeds)], batch_first=True).to(unpadded_audio_embeds.device)
+        unpadded_audio_embeds = pad_sequence([torch.cat([torch.Tensor(x[:y-1, :]), self.audio_encoder.eos_embedding],dim=0) for x,y in zip(unpadded_audio_embeds, num_audio_embeds)], batch_first=True).to(unpadded_audio_embeds.device)
         audio_mask = create_attention_mask(num_audio_embeds).to(unpadded_audio_embeds.device)
-    
+        
         BSZ = self.args.batch_size
         text_lengths = batch["attention_mask"].sum(dim=1)
         audio_lengths = audio_mask.sum(dim=1)
@@ -189,29 +187,27 @@ class MyTrainer:
 
         # Create a new tensor to hold the concatenated sequences
         max_length = total_lengths.max().item()
-        input_ids_padded = torch.full((BSZ, max_length), self.tokenizer.pad_token_id, dtype=torch.long)
-        attention_mask_padded = torch.zeros((BSZ, max_length), dtype=torch.long)
+        max_length = int(max_length)
+
+        embedded_text_padded = torch.zeros((BSZ, max_length, embedded_text.size(-1)), dtype=torch.float).to(self.device)
+
+        attention_mask_padded = torch.zeros((BSZ, max_length), dtype=torch.long).to(self.device)
 
         # Fill in the text and audio sequences
         for i in range(BSZ):
-            # NOTE: no special token between text and audio here
-            text_len = text_lengths[i].item()
-            audio_len = audio_lengths[i].item()
+            text_len = int(text_lengths[i].item())
+            audio_len = int(audio_lengths[i].item())
 
-            input_ids_padded[i, :text_len] = batch["input_ids"][i, :text_len]
-            input_ids_padded[i, text_len:text_len + audio_len] = unpadded_audio_embeds[i, :audio_len]
+            embedded_text_padded[i, :text_len] = embedded_text[i, :text_len]
+            embedded_text_padded[i, text_len:text_len + audio_len] = unpadded_audio_embeds[i, :audio_len]
 
             attention_mask_padded[i, :text_len] = batch["attention_mask"][i, :text_len]
             attention_mask_padded[i, text_len:text_len + audio_len] = audio_mask[i, :audio_len]
-        
-        # to device
-        input_ids_padded = input_ids_padded.to(self.device)
-        attention_mask_padded = attention_mask_padded.to(self.device)
 
-        return input_ids_padded, attention_mask_padded 
+        return embedded_text_padded, attention_mask_padded
     
     def run_experiment(self):
-        self.setup_logging()
+        
         # self.set_seed()
         set_all_seeds(self.args.seed)
 
@@ -223,11 +219,8 @@ class MyTrainer:
         logging.info(f"Dataset: {self.args.dataset}")
         logging.info(f"Task: {self.args.task}")
         logging.info(f"Mode: {self.args.mode}")
+        logging.info(f"Modality: {self.args.modality}")
 
-        self.dataloaders = process(self.args)
-        self.trainloader = self.data["train"]
-        self.valloader = self.data["val"]
-        self.testloader = self.data["test"]
 
         if 'train' in self.args.mode:
             self.train()
@@ -248,22 +241,27 @@ class MyTrainer:
 
             with tqdm(self.trainloader, unit="batch") as tepoch:
                 for batch_idx, batch in enumerate(tepoch):
-                    with torch.autocast(device_type='cuda', dtype=torch.float16):
+                    with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
-                        input_ids, attention_mask = self.embed_audio_and_concatenate(inputs)
-                        outputs = self.model(inputs_embeds=input_ids, attention_mask=attention_mask)
-                        # todo COMPUTE LOSS... 
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
+                        response_input_ids = inputs["labels"].to(self.device)
 
-                        loss = TODO
+                        output = self.model(
+                            inputs_embeds=input_embeds,
+                            labels=response_input_ids,
+                            output_hidden_states=True,
+                            attention_mask=attention_mask,
+                        )
+                        loss = output.loss
                         tepoch.set_postfix(loss=loss.item())
                     # Normalize loss to account for gradient accumulation and do backward pass.
-                    norm_loss /= self.grad_accum_interval
+                    norm_loss = loss / self.grad_accum_interval
                     scaler.scale(norm_loss).backward()
 
                     # Weights update.
                     if (
                         ((batch_idx + 1) % self.grad_accum_interval == 0) or
-                        (batch_idx + 1 == len(self.train_dataloader))
+                        (batch_idx + 1 == len(self.trainloader))
                     ):
                         scaler.step(self.optimizer)
                         scaler.update()
@@ -273,12 +271,12 @@ class MyTrainer:
                     self.step += 1
 
                     # Logging.
-                    if self.step % self.config.log.log_interval == 0:
-                        self.writer.log_training({"loss":loss}, self.step)
-                        self.writer.log_lr(self.lr_scheduler.get_last_lr()[0], self.step)
+                    if self.step % self.args.log_interval == 0:
+                        self.logwriter.log_training({"loss":loss}, self.step)
+                        self.logwriter.log_lr(self.lr_scheduler.get_last_lr()[0], self.step)
 
                     # Perform validation at interval.
-                    if self.step % self.config.log.validation_interval == 0:
+                    if self.step % self.args.validation_interval == 0:
                         self.validate(epoch)
             # TODO: Training and validation logic here
 
@@ -290,7 +288,7 @@ class MyTrainer:
         with tqdm(self.valloader, unit="batch") as vepoch:
             for batch_idx, batch in enumerate(vepoch):
                 with torch.no_grad():
-                    with torch.autocast(device_type='cuda', dtype=torch.float16):
+                    with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
                         input_ids, attention_mask = self.embed_audio_and_concatenate(inputs)
                         outputs = self.model(inputs_embeds=input_ids, attention_mask=attention_mask)
@@ -303,7 +301,7 @@ class MyTrainer:
         save_path = os.path.join("experiment", self.args.run_name, f"checkpoint_{epoch}.pt")
         torch.save(
             {
-                "audio_encoder": self.audio_encoder.module.state_dict(),
+                "audio_encoder": self.audio_encoder.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
                 "lr_scheduler": self.lr_scheduler.state_dict(),
                 "epoch": epoch,
@@ -322,8 +320,13 @@ class MyTrainer:
 def parse_arguments():
     parser = argparse.ArgumentParser(description='ML Experiment')
     parser.add_argument('--learning_rate', type=float, default=5e-5, help='Learning rate for the optimizer')
+    parser.add_argument('--optimizer_beta1', type=float, default=0.9, help='Beta1 for the optimizer')
+    parser.add_argument('--optimizer_beta2', type=float, default=0.999, help='Beta2 for the optimizer')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size for training')
+    parser.add_argument('--test_batch_size', type=int, default=4, help='Batch size for testing')
     parser.add_argument('--epochs', type=int, default=5, help='Number of epochs to train')
+    parser.add_argument('--validation_interval', type=int, default=1000, help='Interval for validation')
+    parser.add_argument('--log_interval', type=int, default=1, help='Interval for logging')
     parser.add_argument('--model', type=str, default='GeneZC/MiniChat-2-3B', help='Model architecture to use')
     parser.add_argument('--dataset', type=str, default='annomi', help='Dataset to use for training')
     parser.add_argument('--task', type=str, default='classification', help='Task type (e.g., classification, forecasting)')
@@ -333,8 +336,9 @@ def parse_arguments():
     parser.add_argument('--config', type=str, default='config/config_full.yaml', help='Path to the configuration file')
     parser.add_argument('--grad_accum_interval', type=int, default=16, help='Gradient accumulation interval')
     parser.add_argument('--checkpoint_path', type=str, help='Path to the checkpoint to resume training')
-    parser.add_argument('--mode', type=str, choices=['speech', 'text'], required=True, help='Data mode to use (speech or text)')
+    parser.add_argument('--modality', type=str, choices=['speech', 'text'], required=True, help='Data mode to use (speech or text)')
     parser.add_argument('--max_audio_s', default=100, type=int, help='Maximum number of seconds to use for audio')
+    parser.add_argument('--datatype', type=str, default='float16', help='Data type to use for training')
     args = parser.parse_args()
     return args
 

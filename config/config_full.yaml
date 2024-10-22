@@ -1,7 +1,7 @@
 model:
   audio_encoder:
     type: facebook/hubert-large-ls960-ft
-    downsample_method: pool  
+    # downsample_method: pool  
     # downsample_factor: 4
     pooling:
       kernel_size: 8

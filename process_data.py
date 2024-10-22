@@ -92,8 +92,10 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
                 context = session[:i]
                 target = session[i]
                 # pairs.append({"context": context, "target": target})
-            # if begin == end for last item of context, skip
-            if context[-1]["begin"] == context[-1]["end"]:
+            # if begin == end for last item of context, skip or also skip when either of them is None
+            if context[-1]["begin"] == context[-1]["end"] or context[-1]["begin"] is None or context[-1]["end"] is None:
+                continue
+            if context[-1]["begin"] >= context[-1]["end"]:
                 continue
             pairs.append({"context": context, "target": target})
         return pairs
@@ -112,8 +114,8 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
         test_data.extend(create_context_target_pairs(sessions[tid]))
 
     trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=custom_datacollate)
-    devloader = torch.utils.data.DataLoader(dev_data, batch_size=args.batch_size, shuffle=False, collate_fn=custom_datacollate)
-    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, collate_fn=custom_datacollate)
+    devloader = torch.utils.data.DataLoader(dev_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate)
+    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate)
 
     # TEST SAMPLING FROM DEVLOADER
     if print_examples:

@@ -1,6 +1,7 @@
 # Speech MI - DJ 2024 Fall Project
 
 ## TODOs
+- peftify
 - write the training code in the loop
     
 ## Model and Framework
