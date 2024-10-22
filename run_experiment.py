@@ -15,12 +15,15 @@ import torchaudio
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 
-from process_data import process # TODO
+from process_data import process 
 from log_writer import LogWriter 
 from audio_encoder import AudioEncoder
 from audio_llama import AudioLlamaForCausalLM
 from utils import set_all_seeds, create_attention_mask, compute_num_audio_embeds
 import librosa
+
+# Import LoRA
+from peft import get_peft_model, LoraConfig, TaskType
 
 class MyTrainer:
     def __init__(self, args):
@@ -29,18 +32,29 @@ class MyTrainer:
         self.datatype = torch.float16 if args.datatype == 'float16' else torch.float32
         self.config = OmegaConf.load(args.config)
         self.setup_logging()
-        self.logwriter = LogWriter(self.config, os.path.join('experiment', args.run_name))
-
+        self.logwriter = LogWriter(self.config, os.path.join(self.args.save_dir, "experiment", self.args.run_name))
+        # 'experiment', args.run_name))
         # Setup Model
-        # self.model = AutoModelForCausalLM.from_pretrained(args.model)
         self.model = AudioLlamaForCausalLM.from_pretrained(
             args.model,
             use_cache=True,
             torch_dtype=self.datatype,
         ).eval()
 
-        for param in self.model.parameters():
-            param.requires_grad = False
+        if args.use_lora:
+            lora_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                r=8,
+                lora_alpha=32,
+                lora_dropout=0.1,
+                bias="none"
+            )
+            self.model = get_peft_model(self.model, lora_config)
+            self.model.print_trainable_parameters()
+            logging.info("LoRA module added to the model.")
+        else:
+            for param in self.model.parameters():
+                param.requires_grad = False
         logging.info(f"Loaded model {args.model}.")
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -80,7 +94,7 @@ class MyTrainer:
             self.load_checkpoint(args.checkpoint_path)
 
     def setup_logging(self):
-        log_dir = os.path.join('experiment', self.args.run_name)
+        log_dir = os.path.join(self.args.save_dir, "experiment", self.args.run_name)
         os.makedirs(log_dir, exist_ok=True)
         logging.basicConfig(filename=os.path.join(log_dir, 'experiment.log'), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         logging.info('Logging setup complete.')
@@ -96,13 +110,12 @@ class MyTrainer:
         for _ in range(418):
             next(self.trainloader)
 
-
-
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         self.audio_encoder.load_state_dict(checkpoint["audio_encoder"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        
         self.start_epoch = checkpoint["epoch"]
         self.step = checkpoint["step"]
 
@@ -113,6 +126,11 @@ class MyTrainer:
                         state[k] = v.cuda(self.args.gpu_idx)
 
         print(f"Loaded checkpoint from {checkpoint_path}.\n")
+
+        # lora load_from_checkpoint
+        if self.args.use_lora:
+            self.model.load_from_checkpoint(self.args.lora_checkpoint_path)
+            logging.info("Loaded LoRA checkpoint.")
 
     def prepare_batch(self, batch):
         encoding = self.tokenizer(batch["inputs"], return_tensors="pt", padding="longest", truncation=True, max_length=512)
@@ -161,7 +179,10 @@ class MyTrainer:
 
 
     def embed_audio_and_concatenate(self, batch):
-        embedded_text= self.model.model.embed_tokens(batch["input_ids"])
+        if self.args.use_lora:
+            embedded_text = self.model.model.model.embed_tokens(batch["input_ids"])
+        else:
+            embedded_text= self.model.model.embed_tokens(batch["input_ids"])
         if self.args.modality == "text":
             return embedded_text, batch["attention_mask"]
         padded_audios = batch["input_features"]
@@ -213,13 +234,28 @@ class MyTrainer:
 
         logging.info(f"Running experiment with the following parameters:")
         logging.info(f"Learning Rate: {self.args.learning_rate}")
+        logging.info(f"Optimizer Beta1: {self.args.optimizer_beta1}")
+        logging.info(f"Optimizer Beta2: {self.args.optimizer_beta2}")
         logging.info(f"Batch Size: {self.args.batch_size}")
+        logging.info(f"Test Batch Size: {self.args.test_batch_size}")
         logging.info(f"Epochs: {self.args.epochs}")
+        logging.info(f"Validation Interval: {self.args.validation_interval}")
+        logging.info(f"Log Interval: {self.args.log_interval}")
         logging.info(f"Model: {self.args.model}")
         logging.info(f"Dataset: {self.args.dataset}")
         logging.info(f"Task: {self.args.task}")
         logging.info(f"Mode: {self.args.mode}")
+        logging.info(f"Save Directory: {self.args.save_dir}")
+        logging.info(f"Run Name: {self.args.run_name}")
+        logging.info(f"Seed: {self.args.seed}")
+        logging.info(f"Config: {self.args.config}")
+        logging.info(f"Gradient Accumulation Interval: {self.args.grad_accum_interval}")
+        logging.info(f"Checkpoint Path: {self.args.checkpoint_path}")
         logging.info(f"Modality: {self.args.modality}")
+        logging.info(f"Max Audio Seconds: {self.args.max_audio_s}")
+        logging.info(f"Data Type: {self.args.datatype}")
+        logging.info(f"Use LoRA: {self.args.use_lora}")
+        logging.info(f"LoRA Checkpoint Path: {self.args.lora_checkpoint_path}")
 
 
         if 'train' in self.args.mode:
@@ -275,30 +311,50 @@ class MyTrainer:
                         self.logwriter.log_training({"loss":loss}, self.step)
                         self.logwriter.log_lr(self.lr_scheduler.get_last_lr()[0], self.step)
 
+                    if self.step == self.args.steps:
+                        self.validate(epoch)
+                        return
                     # Perform validation at interval.
                     if self.step % self.args.validation_interval == 0:
                         self.validate(epoch)
-            # TODO: Training and validation logic here
 
-
+            
 
     def validate(self, epoch):
         self.audio_encoder.eval()
+        self.model.eval()
+        total_loss = 0
+        num_batches = 0
+
         # Validation loop
         with tqdm(self.valloader, unit="batch") as vepoch:
             for batch_idx, batch in enumerate(vepoch):
                 with torch.no_grad():
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
-                        input_ids, attention_mask = self.embed_audio_and_concatenate(inputs)
-                        outputs = self.model(inputs_embeds=input_ids, attention_mask=attention_mask)
-                        # todo COMPUTE LOSS... 
-                        loss = TODO
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
+                        response_input_ids = inputs["labels"].to(self.device)
+
+                        output = self.model(
+                            inputs_embeds=input_embeds,
+                            labels=response_input_ids,
+                            output_hidden_states=True,
+                            attention_mask=attention_mask,
+                        )
+                        loss = output.loss
+                        vepoch.set_postfix(loss=loss.item())
+                        total_loss += loss.item()
+                        num_batches += 1
                         vepoch.set_postfix(loss=loss.item())
 
-                self.val_step +=1
-                self.writer.log_validation({"loss":loss}, self.val_step)
-        save_path = os.path.join("experiment", self.args.run_name, f"checkpoint_{epoch}.pt")
+                self.val_step += 1
+                self.logwriter.log_validation({"loss": loss}, self.val_step)
+
+        avg_loss = total_loss / num_batches
+        logging.info(f"Validation loss after epoch {epoch}: {avg_loss}")
+
+        # save_path = os.path.join("experiment", self.args.run_name, f"checkpoint_epoch_{epoch}_step_{self.step}.pt")
+        save_path = os.path.join(self.args.save_dir, "experiment", self.args.run_name, f"checkpoint_epoch_{epoch}_step_{self.step}.pt")
         torch.save(
             {
                 "audio_encoder": self.audio_encoder.state_dict(),
@@ -309,22 +365,84 @@ class MyTrainer:
             },
             save_path,
         )
-        # print(f"Saved checkpoint for epoch {epoch} to {save_path}.\n")
+        # peft save
+        if self.args.use_lora:
+            #self.model.save_pretrained(os.path.join("experiment", self.args.run_name, f"lora_checkpoint_epoch_{epoch}_step_{self.step}"))
+            self.model.save_pretrained(os.path.join(self.args.save_dir, "experiment", self.args.run_name, f"lora_checkpoint_epoch_{epoch}_step_{self.step}"))
         logging.info(f"Saved checkpoint for epoch {epoch} to {save_path}.\n")
+
 
     def test(self):
         logging.info("Running in test mode")
-        # TODO: Add your testing logic here
+        self.audio_encoder.eval()
+        self.model.eval()
+        total_loss = 0
+        num_batches = 0
+        generated_texts = []
+
+        # Validation loop
+        with tqdm(self.valloader, unit="batch") as tepoch:
+            for batch_idx, batch in enumerate(tepoch):
+                with torch.no_grad():
+                    with torch.autocast(device_type='cuda', dtype=self.datatype):
+                        inputs = self.prepare_batch(batch)
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
+                        response_input_ids = inputs["labels"].to(self.device)
+
+                        generation_output = self.model.generate(
+                            inputs_embeds=input_embeds,
+                            attention_mask=attention_mask,
+                            max_length=512,
+                            num_beams=5,
+                            early_stopping=True
+                        )
+                        
+                        # TODO: only get the newly generated part
+                        # and decode the ids into a string
+                        logits = [ x[:, input_embeds.size(1):] for x in generation_output]
+                        decoded_output = self.tokenizer.batch_decode(logits, skip_special_tokens=True)
+                        #print(gen)
+
+                        decoded_labels = self.tokenizer.batch_decode(response_input_ids, skip_special_tokens=True)
+                        generated_texts.extend(zip(decoded_output, decoded_labels))
+
+                        loss = self.model(
+                            inputs_embeds=input_embeds,
+                            labels=response_input_ids,
+                            output_hidden_states=True,
+                            attention_mask=attention_mask,
+                        ).loss
+                        tepoch.set_postfix(loss=loss.item())
+                        total_loss += loss.item()
+                        num_batches += 1
+
+        avg_loss = total_loss / num_batches
+        logging.info(f"Test loss: {avg_loss}")
+        logging.info(f"Generated texts and labels: {generated_texts}")
+        # compute accuracy and log
+        correct = 0.0
+        total = 0.0
+
+        for generated, label in generated_texts:
+            if generated.strip() == label.strip():
+                correct += 1
+                total += 1
+
+        accuracy = correct / total if total > 0 else 0
+        logging.info(f"Test accuracy: {accuracy}")
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='ML Experiment')
+    parser.add_argument('--save_dir', type=str, default='/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/', help='Absolute path of the storage for checkpoints and logs')
     parser.add_argument('--learning_rate', type=float, default=5e-5, help='Learning rate for the optimizer')
     parser.add_argument('--optimizer_beta1', type=float, default=0.9, help='Beta1 for the optimizer')
     parser.add_argument('--optimizer_beta2', type=float, default=0.999, help='Beta2 for the optimizer')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size for training')
     parser.add_argument('--test_batch_size', type=int, default=4, help='Batch size for testing')
-    parser.add_argument('--epochs', type=int, default=5, help='Number of epochs to train')
+    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs to train')
+    # number of steps to train
+    parser.add_argument('--steps', type=int, default=20000, help='Number of steps to train')
     parser.add_argument('--validation_interval', type=int, default=1000, help='Interval for validation')
     parser.add_argument('--log_interval', type=int, default=1, help='Interval for logging')
     parser.add_argument('--model', type=str, default='GeneZC/MiniChat-2-3B', help='Model architecture to use')
@@ -339,6 +457,8 @@ def parse_arguments():
     parser.add_argument('--modality', type=str, choices=['speech', 'text'], required=True, help='Data mode to use (speech or text)')
     parser.add_argument('--max_audio_s', default=100, type=int, help='Maximum number of seconds to use for audio')
     parser.add_argument('--datatype', type=str, default='float16', help='Data type to use for training')
+    parser.add_argument('--use_lora', action='store_true', default=True, help='Use LoRA for model adaptation')
+    parser.add_argument('--lora_checkpoint_path', type=str, help='Path to the LoRA checkpoint')
     args = parser.parse_args()
     return args
 

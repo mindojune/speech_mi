@@ -1,8 +1,9 @@
 # Speech MI - DJ 2024 Fall Project
 
 ## TODOs
-- peftify
-- write the training code in the loop
+- peftify (this is needed for performance - the LLM is not pretrained for the speech task, and thus we need to apply 
+           LORA training - of course for both text and speech)
+- finish the code with all the fixins (validation, test, and saving and such)
     
 ## Model and Framework
 - LLM + Speech Adapter
