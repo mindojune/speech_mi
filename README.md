@@ -1,8 +1,11 @@
 # Speech MI - DJ 2024 Fall Project
 
 ## TODOs
-- finish the code with all the fixins (validation, test, and saving and such)
-- do test runs and make sure all is functional
+- finish the code with all the fixins (validation, test, and saving and such) [first pass]
+- do test runs and make sure all is functional [v] 241023 afternoon
+- do the prelimnary tests
+    - classification []
+    - forecasting []
     
 ## Model and Framework
 - LLM + Speech Adapter

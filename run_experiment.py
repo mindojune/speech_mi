@@ -295,7 +295,7 @@ class MyTrainer:
         scaler = torch.cuda.amp.GradScaler()
         for epoch in range(self.start_epoch, self.start_epoch+self.num_epochs):
             # print(f"Epoch {epoch}")
-            logging.info(f"Epoch {epoch}/{self.args.epochs}")
+            logging.info(f"Epoch {epoch+1}/{self.args.epochs}")
 
             # Training loop.
             self.audio_encoder.train()
@@ -478,7 +478,6 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size for training')
     parser.add_argument('--test_batch_size', type=int, default=4, help='Batch size for testing')
     parser.add_argument('--epochs', type=int, default=500, help='Number of epochs to train')
-    # number of steps to train
     parser.add_argument('--steps', type=int, default=20000, help='Number of steps to train')
     parser.add_argument('--validation_interval', type=int, default=1000, help='Interval for validation')
     parser.add_argument('--log_interval', type=int, default=1, help='Interval for logging')
