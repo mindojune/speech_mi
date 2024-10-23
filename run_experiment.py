@@ -1,5 +1,6 @@
 import os
 os.environ['HF_HOME'] = '/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/.cache'
+import sys
 import argparse
 import logging
 from tqdm.auto import tqdm
@@ -106,7 +107,9 @@ class MyTrainer:
     def setup_logging(self):
         log_dir = os.path.join(self.args.save_dir, "experiment", self.args.run_name)
         os.makedirs(log_dir, exist_ok=True)
-        logging.basicConfig(filename=os.path.join(log_dir, 'experiment.log'), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        logging.basicConfig(filename=os.path.join(log_dir, 'experiment.log'), 
+                            level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'),
+        logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
         logging.info('Logging setup complete.')
 
     def set_dataloaders(self):
@@ -258,6 +261,7 @@ class MyTrainer:
         logging.info(f"Log Interval: {self.args.log_interval}")
         logging.info(f"Model: {self.args.model}")
         logging.info(f"Dataset: {self.args.dataset}")
+        logging.info(f"Data Length: {self.args.data_length}")
         logging.info(f"Task: {self.args.task}")
         logging.info(f"Mode: {self.args.mode}")
         logging.info(f"Save Directory: {self.args.save_dir}")
@@ -271,6 +275,7 @@ class MyTrainer:
         logging.info(f"Data Type: {self.args.datatype}")
         logging.info(f"Use LoRA: {self.args.use_lora}")
         logging.info(f"LoRA Checkpoint Path: {self.args.lora_checkpoint_path}")
+        logging.info(f"Max New Tokens: {self.args.max_new_tokens}")
 
 
         if 'train' in self.args.mode:
@@ -296,7 +301,7 @@ class MyTrainer:
                         inputs = self.prepare_batch(batch)
                         input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs,bsz=self.args.batch_size)
                         response_input_ids = inputs["labels"].to(self.device)
-
+                        
                         output = self.model(
                             inputs_embeds=input_embeds,
                             labels=response_input_ids,
@@ -405,23 +410,29 @@ class MyTrainer:
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
                         input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs, bsz = self.args.test_batch_size)
-                        response_input_ids = inputs["labels"].to(self.device)
+                        response_input_ids = inputs["labels"] #.to(self.device)\
+                        # map -100 to pad_token_id again (other wise decode error)
+                        response_input_ids = response_input_ids.masked_fill(response_input_ids == -100, self.tokenizer.pad_token_id)
 
                         generation_output = self.model.generate(
+                            input_ids=None,
                             inputs_embeds=input_embeds,
+                            max_new_tokens=self.args.max_new_tokens,
                             attention_mask=attention_mask,
-                            max_length=512,
-                            num_beams=5,
-                            early_stopping=True
+                            use_cache=True,
+                            # past_key_values=None,
+                            # max_length=512,
+                            # num_beams=5,
+                            # early_stopping=True
                         )
+                        # print(generation_output)
                         
-                        # TODO: only get the newly generated part
-                        # and decode the ids into a string
-                        logits = [ x[:, input_embeds.size(1):] for x in generation_output]
-                        decoded_output = self.tokenizer.batch_decode(logits, skip_special_tokens=True)
-                        #print(gen)
+                        logits = [ x[input_embeds.size(1):] for x in generation_output]
+                        decoded_output = self.tokenizer.batch_decode(logits, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                        decoded_labels = self.tokenizer.batch_decode(response_input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                        # print(decoded_output)
+                        # print(decoded_labels)
 
-                        decoded_labels = self.tokenizer.batch_decode(response_input_ids, skip_special_tokens=True)
                         generated_texts.extend(zip(decoded_output, decoded_labels))
 
                         loss = self.model(
@@ -478,6 +489,10 @@ def parse_arguments():
     parser.add_argument('--datatype', type=str, default='float16', help='Data type to use for training')
     parser.add_argument('--use_lora', action='store_true', default=True, help='Use LoRA for model adaptation')
     parser.add_argument('--lora_checkpoint_path', type=str, help='Path to the LoRA checkpoint')
+    parser.add_argument('--max_new_tokens', type=int, default=256, help='Maximum number of tokens to generate')
+    parser.add_argument('--data_length', type=int, nargs=3, default=[-1, -1, -1], help='Data length for training, \
+                        validation, and testing. -1 means use all data.')
+    
     args = parser.parse_args()
     return args
 

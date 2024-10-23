@@ -113,6 +113,17 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
     for tid in test_sessions:
         test_data.extend(create_context_target_pairs(sessions[tid]))
 
+    if hasattr(args, 'data_length') and args.data_length is not None:
+        train_len, dev_len, test_len = args.data_length
+        # Adjust lengths if specified as -1
+        train_len = train_len if train_len != -1 else len(train_data)
+        dev_len = dev_len if dev_len != -1 else len(dev_data)
+        test_len = test_len if test_len != -1 else len(test_data)
+
+        train_data = train_data[:train_len]
+        dev_data = dev_data[:dev_len]
+        test_data = test_data[:test_len]
+
     trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=custom_datacollate)
     devloader = torch.utils.data.DataLoader(dev_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate)
     testloader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate)

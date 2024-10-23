@@ -51,6 +51,13 @@ class AudioLlamaForCausalLM(LlamaForCausalLM):
         Returns:
             CausalLMOutputWithPast
         ```"""
+        # print("*"*30)
+        # if input_ids is not None:
+        #     print("ids:", input_ids.shape)
+        # if inputs_embeds is not None:
+        #     print("embeds:", inputs_embeds.shape)
+        # if past_key_values is not None:
+        #     print("past_key_values:", past_key_values)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -168,24 +175,34 @@ class AudioLlamaForCausalLM(LlamaForCausalLM):
         """
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
-    ):
-        if past_key_values:
+    ):  
+        # print("="*30)
+        # print(input_ids)
+        # print(inputs_embeds)
+        # print(past_key_values)
+        # print(past_key_values is None)
+        # if past_key_values: 
+        # check past_key_values is empty
+        if past_key_values.get_seq_length() != 0:
             input_ids = input_ids[:, -1:]
+        # if inputs_embeds is not None:
+        #     input_ids = None
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
+            if past_key_values.get_seq_length() != 0:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and  past_key_values.get_seq_length() == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
+        # print(position_ids.shape)
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -194,4 +211,10 @@ class AudioLlamaForCausalLM(LlamaForCausalLM):
                 "attention_mask": attention_mask,
             }
         )
+        # print("*"*30)
+        # print(model_inputs)
+        # print shapes of the model inputs
+        # for key in model_inputs:
+        #     if model_inputs[key] is not None:
+        #         print(f"Model input {key} shape: {model_inputs[key].shape}")
         return model_inputs
