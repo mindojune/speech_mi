@@ -119,9 +119,15 @@ class MyTrainer:
         self.testloader = self.dataloaders["test"]
 
         # advance trainloader by 418 so that it starts from 419
-        self.trainloader = iter(self.trainloader)
-        for _ in range(418):
-            next(self.trainloader)
+        # self.trainloader = iter(self.trainloader)
+        # for _ in range(418):
+        #     next(self.trainloader)
+
+        # log stats here
+        logging.info(f"Trainloader length: {len(self.trainloader)}")
+        logging.info(f"Valloader length: {len(self.valloader)}")
+        logging.info(f"Testloader length: {len(self.testloader)}")
+
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -195,8 +201,8 @@ class MyTrainer:
         return inputs      
 
 
-    def embed_audio_and_concatenate(self, batch, bsz):
-        BSZ = bsz
+    def embed_audio_and_concatenate(self, batch):
+        BSZ = batch["input_ids"].size(0)
         if self.args.use_lora:
             embedded_text = self.model.model.model.embed_tokens(batch["input_ids"])
         else:
@@ -220,7 +226,7 @@ class MyTrainer:
         # BSZ = self.args.batch_size
         text_lengths = batch["attention_mask"].sum(dim=1)
         audio_lengths = audio_mask.sum(dim=1)
-
+ 
         # Calculate the total length after concatenation
         total_lengths = text_lengths + audio_lengths
 
@@ -299,7 +305,7 @@ class MyTrainer:
                 for batch_idx, batch in enumerate(tepoch):
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
-                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs,bsz=self.args.batch_size)
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
                         response_input_ids = inputs["labels"].to(self.device)
                         
                         output = self.model(
@@ -352,7 +358,8 @@ class MyTrainer:
                 with torch.no_grad():
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
-                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs, bsz = self.args.test_batch_size)
+                        
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
                         response_input_ids = inputs["labels"].to(self.device)
                         # print(input_embeds.size(), response_input_ids.size())
                         output = self.model(
@@ -404,12 +411,12 @@ class MyTrainer:
         generated_texts = []
 
         # Validation loop
-        with tqdm(self.valloader, unit="batch") as tepoch:
+        with tqdm(self.testloader, unit="batch") as tepoch:
             for batch_idx, batch in enumerate(tepoch):
                 with torch.no_grad():
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
-                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs, bsz = self.args.test_batch_size)
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
                         response_input_ids = inputs["labels"] #.to(self.device)\
                         # map -100 to pad_token_id again (other wise decode error)
                         response_input_ids = response_input_ids.masked_fill(response_input_ids == -100, self.tokenizer.pad_token_id)
