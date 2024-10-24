@@ -20,7 +20,7 @@ def custom_datacollate(batch):
         # Interleave utterance_text from context
         interleaved_text = "\n".join([f"{utterance['interlocutor']}: {utterance['utterance_text']}" for utterance in c])
         # add a special token to separate the context from the target
-        interleaved_text += f"\n[SEP]"  # change introduced on 241024 
+        interleaved_text += f"\n[SEP]\n"  # change introduced on 241024 
         # inputs.append(interleaved_text)
 
         # Determine the label based on the interlocutor
@@ -30,6 +30,7 @@ def custom_datacollate(batch):
         else:
             # labels.append(t["client_talk_type"])
             label = t["client_talk_type"]
+        label += "\n[CLS]"
         # interleaved_text += " " + label # don't do this here 
         
         inputs.append(interleaved_text)

@@ -31,6 +31,9 @@
         - [IMPORTANT]: I think I figured out why
                        in the convention of the audio_llama code, they were 
                        providing
+                       so i added this part in embed and concatenate... make sure this is working as intended
+                       so far loss curve is very diff, looking good
+                       
 ## Model and Framework
 - LLM + Speech Adapter
 - We can use the srag codebase...

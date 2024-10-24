@@ -469,6 +469,16 @@ class MyTrainer:
                         decoded_output = self.tokenizer.batch_decode(generation_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
                         decoded_labels = self.tokenizer.batch_decode(response_input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
+                        # decoded_output = [ x.split("\n")[0] for x in decoded_output]
+                        processed = []
+                        for do in decoded_output:
+                            try:
+                                processed.append(do.split("\n")[0])
+                                # processed.append(do.split("[CLS]")[0].split("\n")[0])
+                            except:
+                                processed.append(do)
+                        decoded_output = processed
+                        decoded_labels = [ x.split("\n")[0] for x in decoded_labels]
 
                         generated_texts.extend(zip(prompt, decoded_output, decoded_labels, interlocutors))
 
@@ -542,7 +552,7 @@ def parse_arguments():
     parser.add_argument('--datatype', type=str, default='float16', help='Data type to use for training')
     parser.add_argument('--use_lora', action='store_true', default=True, help='Use LoRA for model adaptation')
     parser.add_argument('--lora_checkpoint_path', type=str, help='Path to the LoRA checkpoint')
-    parser.add_argument('--max_new_tokens', type=int, default=256, help='Maximum number of tokens to generate')
+    parser.add_argument('--max_new_tokens', type=int, default=10, help='Maximum number of tokens to generate')
     parser.add_argument('--data_length', type=int, nargs=3, default=[-1, -1, -1], help='Data length for training, \
                         validation, and testing. -1 means use all data.')
     
