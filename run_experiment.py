@@ -277,6 +277,7 @@ class MyTrainer:
             embedded_text_padded = torch.cat([embedded_text_padded, response_embeds], dim=1)
             label_mask = batch["label_mask"]
             attention_mask_padded = torch.cat([attention_mask_padded,  label_mask], dim=1)
+            return embedded_text_padded, attention_mask_padded
         else:
             return embedded_text_padded, attention_mask_padded
     
