@@ -34,7 +34,7 @@ class MyTrainer:
         self.datatype = torch.float16 if args.datatype == 'float16' else torch.float32
         self.config = OmegaConf.load(args.config)
         self.setup_logging()
-        self.logwriter = LogWriter(self.config, os.path.join(self.args.save_dir, "experiment", self.args.run_name))
+        self.logwriter = LogWriter(self.config, os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name))
         # 'experiment', args.run_name))
         # Setup Model
         self.model = AudioLlamaForCausalLM.from_pretrained(
@@ -58,7 +58,8 @@ class MyTrainer:
                 r=8,
                 lora_alpha=32,
                 lora_dropout=0.1,
-                bias="none"
+                bias="none",
+                # target_modules=["q", "v"], # testing ablation
             )
             self.model = get_peft_model(self.model, lora_config)
             self.model.print_trainable_parameters()
@@ -105,7 +106,7 @@ class MyTrainer:
             self.load_checkpoint(args.checkpoint_path)
 
     def setup_logging(self):
-        log_dir = os.path.join(self.args.save_dir, "experiment", self.args.run_name)
+        log_dir = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name)
         os.makedirs(log_dir, exist_ok=True)
         logging.basicConfig(filename=os.path.join(log_dir, 'experiment.log'), 
                             level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'),
@@ -146,14 +147,6 @@ class MyTrainer:
 
         logging.info(f"Loaded checkpoint from {checkpoint_path}.\n")
 
-        # lora load_from_checkpoint
-        # if self.args.use_lora:
-        #     # peft_config = PeftConfig.from_pretrained(self.args.lora_checkpoint_path)
-        #     # self.model.load_from_checkpoint(self.args.lora_checkpoint_path)
-        #     # self.model = PeftModel.from_pretrained(self.model, self.args.lora_checkpoint_path)
-        #     self.model = 
-        #     logging.info(f"Loaded LoRA checkpoint from {self.args.lora_checkpoint_path}.\n")
-
 
     def prepare_batch(self, batch):
         encoding = self.tokenizer(batch["inputs"], return_tensors="pt", padding="longest", truncation=True, max_length=512)
@@ -161,6 +154,8 @@ class MyTrainer:
         encoding["labels"] = label_encoding["input_ids"]
         # pad to -100
         encoding["labels"] = encoding["labels"].masked_fill(encoding["labels"] == self.tokenizer.pad_token_id, -100)
+        encoding["label_mask"] = label_encoding["attention_mask"]
+
         
         if self.args.modality == "speech":
             #audio_paths = [x["audio_path"] for x in batch["audio_infos"]]
@@ -201,14 +196,36 @@ class MyTrainer:
         return inputs      
 
 
-    def embed_audio_and_concatenate(self, batch):
+    def embed_audio_and_concatenate(self, batch, train=True):
+        """
+        TODO: here I need to figure out an intelligence way to concatenate
+              the response to the context ONLY during training
+              Also need to be sure that I'm not fucling up the masks... (as always)
+              This is the hardship of doing in batche manner
+        """
         BSZ = batch["input_ids"].size(0)
         if self.args.use_lora:
             embedded_text = self.model.model.model.embed_tokens(batch["input_ids"])
         else:
             embedded_text= self.model.model.embed_tokens(batch["input_ids"])
         if self.args.modality == "text":
-            return embedded_text, batch["attention_mask"]
+            if train:
+                # concatenate the response to the context
+                response_input_ids = batch["labels"]
+                # map -100 to pad_token_id again (other wise decode error)
+                response_input_ids = response_input_ids.masked_fill(response_input_ids == -100, self.tokenizer.pad_token_id)
+                if self.args.use_lora:
+                    response_embeds = self.model.model.model.embed_tokens(response_input_ids)
+                else:
+                    response_embeds = self.model.model.embed_tokens(response_input_ids)
+                embedded_text = torch.cat([embedded_text, response_embeds], dim=1)
+                label_mask = batch["label_mask"]
+                attention_mask = torch.cat([batch["attention_mask"],  label_mask], dim=1)
+                return embedded_text, attention_mask
+            else:
+                attention_mask = batch["attention_mask"]
+                return embedded_text, attention_mask
+        
         padded_audios = batch["input_features"]
         padded_audios = padded_audios.to(self.device)
 
@@ -249,7 +266,19 @@ class MyTrainer:
             attention_mask_padded[i, :text_len] = batch["attention_mask"][i, :text_len]
             attention_mask_padded[i, text_len:text_len + audio_len] = audio_mask[i, :audio_len]
 
-        return embedded_text_padded, attention_mask_padded
+        if train:
+            # concatenate the response to the context
+            response_input_ids = batch["labels"]
+            response_input_ids = response_input_ids.masked_fill(response_input_ids == -100, self.tokenizer.pad_token_id)
+            if self.args.use_lora:
+                response_embeds = self.model.model.model.embed_tokens(response_input_ids)
+            else:
+                response_embeds = self.model.model.embed_tokens(response_input_ids)
+            embedded_text_padded = torch.cat([embedded_text_padded, response_embeds], dim=1)
+            label_mask = batch["label_mask"]
+            attention_mask_padded = torch.cat([attention_mask_padded,  label_mask], dim=1)
+        else:
+            return embedded_text_padded, attention_mask_padded
     
     def run_experiment(self):
         
@@ -294,7 +323,7 @@ class MyTrainer:
         logging.info("Running in train mode")
         scaler = torch.cuda.amp.GradScaler()
         for epoch in range(self.start_epoch, self.start_epoch+self.num_epochs):
-            # print(f"Epoch {epoch}")
+
             logging.info(f"Epoch {epoch+1}/{self.args.epochs}")
 
             # Training loop.
@@ -306,8 +335,7 @@ class MyTrainer:
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
                         inputs = self.prepare_batch(batch)
                         input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
-                        response_input_ids = inputs["labels"].to(self.device)
-                        
+                        response_input_ids = inputs["labels"]#.to(self.device)
                         output = self.model(
                             inputs_embeds=input_embeds,
                             labels=response_input_ids,
@@ -360,8 +388,8 @@ class MyTrainer:
                         inputs = self.prepare_batch(batch)
                         
                         input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
-                        response_input_ids = inputs["labels"].to(self.device)
-                        # print(input_embeds.size(), response_input_ids.size())
+                        response_input_ids = inputs["labels"]#.to(self.device)
+
                         output = self.model(
                             inputs_embeds=input_embeds,
                             labels=response_input_ids,
@@ -380,7 +408,7 @@ class MyTrainer:
         logging.info(f"Validation loss after epoch {epoch}: {avg_loss}")
 
         # save_path = os.path.join("experiment", self.args.run_name, f"checkpoint_epoch_{epoch}_step_{self.step}.pt")
-        save_path = os.path.join(self.args.save_dir, "experiment", self.args.run_name, f"checkpoint_epoch_{epoch}_step_{self.step}.pt")
+        save_path = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name, f"checkpoint_epoch_{epoch}_step_{self.step}.pt")
         torch.save(
             {
                 "audio_encoder": self.audio_encoder.state_dict(),
@@ -394,7 +422,7 @@ class MyTrainer:
         logging.info(f"Saved checkpoint for epoch {epoch} to {save_path}.\n")
         # peft save
         if self.args.use_lora:
-            lora_save_path = os.path.join(self.args.save_dir, "experiment", self.args.run_name, f"lora_checkpoint_epoch_{epoch}_step_{self.step}")
+            lora_save_path = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name, f"lora_checkpoint_epoch_{epoch}_step_{self.step}")
             #self.model.save_pretrained(os.path.join("experiment", self.args.run_name, f"lora_checkpoint_epoch_{epoch}_step_{self.step}"))
             self.model.save_pretrained(lora_save_path)
             logging.info(f"Saved LoRA checkpoint for epoch {epoch} to {lora_save_path}.\n")
@@ -415,8 +443,9 @@ class MyTrainer:
             for batch_idx, batch in enumerate(tepoch):
                 with torch.no_grad():
                     with torch.autocast(device_type='cuda', dtype=self.datatype):
+                        interlocutors = [x["interlocutor"] for x in batch["audio_infos"]]
                         inputs = self.prepare_batch(batch)
-                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs)
+                        input_embeds, attention_mask = self.embed_audio_and_concatenate(inputs, train=False)
                         response_input_ids = inputs["labels"] #.to(self.device)\
                         # map -100 to pad_token_id again (other wise decode error)
                         response_input_ids = response_input_ids.masked_fill(response_input_ids == -100, self.tokenizer.pad_token_id)
@@ -432,15 +461,16 @@ class MyTrainer:
                             # num_beams=5,
                             # early_stopping=True
                         )
-                        # print(generation_output)
-                        
-                        logits = [ x[input_embeds.size(1):] for x in generation_output]
-                        decoded_output = self.tokenizer.batch_decode(logits, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-                        decoded_labels = self.tokenizer.batch_decode(response_input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-                        # print(decoded_output)
-                        # print(decoded_labels)
 
-                        generated_texts.extend(zip(decoded_output, decoded_labels))
+                        prompt = self.tokenizer.batch_decode(inputs["input_ids"], skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                        #context = [self.tokenizer.decode(x[:input_embeds.size(1)], skip_special_tokens=True, clean_up_tokenization_spaces=True) for x in generation_output]
+                        # logits = [ x[input_embeds.size(1):] for x in generation_output]#
+                        # decoded_output = self.tokenizer.batch_decode(logits, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                        decoded_output = self.tokenizer.batch_decode(generation_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                        decoded_labels = self.tokenizer.batch_decode(response_input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+
+                        generated_texts.extend(zip(prompt, decoded_output, decoded_labels, interlocutors))
 
                         loss = self.model(
                             inputs_embeds=input_embeds,
@@ -458,14 +488,31 @@ class MyTrainer:
         # compute accuracy and log
         correct = 0.0
         total = 0.0
+        correct_client = 0.0
+        total_client = 0.0
+        correct_therapist = 0.0
+        total_therapist = 0.0
 
-        for generated, label in generated_texts:
+        for prompt, generated, label, interlocutor in generated_texts:
             if generated.strip() == label.strip():
                 correct += 1
-                total += 1
+                if interlocutor == "client":
+                    correct_client += 1
+                elif interlocutor == "therapist":
+                    correct_therapist += 1
+            if interlocutor == "client":
+                total_client += 1
+            elif interlocutor == "therapist":
+                total_therapist += 1
+            total += 1
 
         accuracy = correct / total if total > 0 else 0
+        accuracy_client = correct_client / total_client if total_client > 0 else 0
+        accuracy_therapist = correct_therapist / total_therapist if total_therapist > 0 else 0
+
         logging.info(f"Test accuracy: {accuracy}")
+        logging.info(f"Test accuracy (client): {accuracy_client}")
+        logging.info(f"Test accuracy (therapist): {accuracy_therapist}")
 
 
 def parse_arguments():

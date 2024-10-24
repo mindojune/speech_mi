@@ -108,6 +108,23 @@ class AudioLlamaForCausalLM(LlamaForCausalLM):
             # Shift logits and labels for next-token prediction
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels_padded[..., 1:].contiguous()
+
+            if False:
+                # decode shift_labels
+                from transformers import AutoTokenizer
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    "GeneZC/MiniChat-2-3B",
+                    use_fast=False,
+                    padding_side="left",
+                )
+                # replace -100 with self.tokenizer.pad_token_id
+                shift_labels = shift_labels.masked_fill(shift_labels == -100, self.tokenizer.eos_token_id)
+                decoded = self.tokenizer.batch_decode(shift_labels)
+                print("*"*30)
+                print("inside forward")
+                print("decoded:", decoded)
+                input()
+
             
             # Flatten the tensors
             loss_fct = CrossEntropyLoss(ignore_index=-100)

@@ -19,20 +19,29 @@ def custom_datacollate(batch):
     for c, t in zip(context, target):
         # Interleave utterance_text from context
         interleaved_text = "\n".join([f"{utterance['interlocutor']}: {utterance['utterance_text']}" for utterance in c])
-        inputs.append(interleaved_text)
+        # add a special token to separate the context from the target
+        interleaved_text += f"\n[SEP]"  # change introduced on 241024 
+        # inputs.append(interleaved_text)
 
         # Determine the label based on the interlocutor
         if t["interlocutor"] == "therapist":
-            labels.append(t["main_therapist_behaviour"])
+            #labels.append(t["main_therapist_behaviour"])
+            label = t["main_therapist_behaviour"]
         else:
-            labels.append(t["client_talk_type"])
+            # labels.append(t["client_talk_type"])
+            label = t["client_talk_type"]
+        # interleaved_text += " " + label # don't do this here 
+        
+        inputs.append(interleaved_text)
+        labels.append(label)
 
         # Add the audio path, begin, and end of the last item in the context
         last_item = c[-1]
         audio_cue_infos.append({
             "audio_path": last_item["audio_path"],
             "begin": last_item["begin"],
-            "end": last_item["end"]
+            "end": last_item["end"],
+            "interlocutor": t["interlocutor"]
         })
 
     return {"inputs": inputs, "labels": labels, "audio_infos": audio_cue_infos}
