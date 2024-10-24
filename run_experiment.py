@@ -74,7 +74,10 @@ class MyTrainer:
             use_fast=False,
             padding_side="left",
         )
+        self.tokenizer.truncation_side = "left"
+        self.tokenizer.padding_side = "left"
         self.tokenizer.pad_token = self.tokenizer.eos_token
+        
         self.audio_encoder = AudioEncoder(self.config)
         self.audio_encoder.to(self.device)
         self.model.to(self.device)
@@ -149,8 +152,8 @@ class MyTrainer:
 
 
     def prepare_batch(self, batch):
-        encoding = self.tokenizer(batch["inputs"], return_tensors="pt", padding="longest", truncation=True, max_length=512)
-        label_encoding = self.tokenizer(batch["labels"], return_tensors="pt", padding="longest", truncation=True, max_length=512)
+        encoding = self.tokenizer(batch["inputs"], return_tensors="pt", padding="longest", truncation=True, max_length=self.args.max_length)
+        label_encoding = self.tokenizer(batch["labels"], return_tensors="pt", padding="longest", truncation=True, max_length=self.args.max_length)
         encoding["labels"] = label_encoding["input_ids"]
         # pad to -100
         encoding["labels"] = encoding["labels"].masked_fill(encoding["labels"] == self.tokenizer.pad_token_id, -100)
@@ -311,6 +314,7 @@ class MyTrainer:
         logging.info(f"Data Type: {self.args.datatype}")
         logging.info(f"Use LoRA: {self.args.use_lora}")
         logging.info(f"LoRA Checkpoint Path: {self.args.lora_checkpoint_path}")
+        logging.info(f"Max Length: {self.args.max_length}")
         logging.info(f"Max New Tokens: {self.args.max_new_tokens}")
 
 
@@ -553,6 +557,7 @@ def parse_arguments():
     parser.add_argument('--datatype', type=str, default='float16', help='Data type to use for training')
     parser.add_argument('--use_lora', action='store_true', default=True, help='Use LoRA for model adaptation')
     parser.add_argument('--lora_checkpoint_path', type=str, help='Path to the LoRA checkpoint')
+    parser.add_argument('--max_length', type=int, default=512, help='Maximum length of the input sequence')
     parser.add_argument('--max_new_tokens', type=int, default=10, help='Maximum number of tokens to generate')
     parser.add_argument('--data_length', type=int, nargs=3, default=[-1, -1, -1], help='Data length for training, \
                         validation, and testing. -1 means use all data.')
