@@ -26,6 +26,7 @@ from peft import PeftConfig, PeftModel
 
 # Import LoRA
 from peft import get_peft_model, LoraConfig, TaskType
+from sklearn.metrics import f1_score, classification_report
 
 class MyTrainer:
     def __init__(self, args):
@@ -78,8 +79,13 @@ class MyTrainer:
         self.tokenizer.padding_side = "left"
         self.tokenizer.pad_token = self.tokenizer.eos_token
         
-        self.audio_encoder = AudioEncoder(self.config)
-        self.audio_encoder.to(self.device)
+        if self.args.modality == "speech":
+            self.audio_encoder = AudioEncoder(self.config)
+            if "train" in self.args.mode:
+                if self.args.audio_encoder_weight:
+                    self.audio_encoder.load_state_dict(torch.load(self.args.audio_encoder_weight, map_location=self.device),strict=False)
+                    logging.info(f"Loaded audio encoder from {self.args.audio_encoder_weight}.\n")
+            self.audio_encoder.to(self.device)
         self.model.to(self.device)
         self.feature_extractor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
 
@@ -92,11 +98,15 @@ class MyTrainer:
         self.start_epoch = 0
         self.grad_accum_interval = args.grad_accum_interval
         self.num_epochs = self.args.epochs
+        # Setup optimizer parameters
+        optimizer_params = []
+        if self.args.modality == "speech":
+            optimizer_params.append({'params': self.audio_encoder.parameters()})
+        optimizer_params.append({'params': self.model.parameters()})
+
+        # Initialize the optimizer
         self.optimizer = torch.optim.AdamW(
-            [
-                {'params': self.audio_encoder.parameters()},
-                {'params': self.model.parameters()}
-            ],
+            optimizer_params,
             lr=self.args.learning_rate,
             betas=(self.args.optimizer_beta1, self.args.optimizer_beta2),
         )
@@ -135,7 +145,8 @@ class MyTrainer:
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        self.audio_encoder.load_state_dict(checkpoint["audio_encoder"])
+        if self.args.modality == "speech":
+            self.audio_encoder.load_state_dict(checkpoint["audio_encoder"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
         
@@ -170,10 +181,48 @@ class MyTrainer:
                 begin = audio_info["begin"]
                 end = audio_info["end"]
 
-                waveform, sample_rate = torchaudio.load(fname)
-                waveform = audresample.remix(waveform, mixdown=True).squeeze()
-                signal = audresample.resample(waveform, sample_rate, 16000)
-                audio = signal.squeeze()
+                if False:
+                    # ~3s / 1 batch (bsz=2)
+                    waveform, sample_rate = torchaudio.load(fname)
+                    waveform = audresample.remix(waveform, mixdown=True).squeeze()
+                    signal = audresample.resample(waveform, sample_rate, 16000)
+                    audio = signal.squeeze()
+                elif False:
+                    # 
+                    # audio, sr = librosa.load(fname, sr=16000, mono=True)
+                    # audio = torch.tensor(audio).float().squeeze()
+                    signal, source_rate = audiofile.read(fname)
+                    # print(audiofile.duration(filename))
+                    signal = audresample.resample(signal, source_rate, 16000)
+                    signal = audresample.remix(
+                        signal,
+                        mixdown=True,
+                    )
+                    audio = signal.squeeze()
+                elif False:
+                    import scipy.io.wavfile as wav
+                    sr, audio = wav.read(fname)
+                    waveform = audresample.remix(audio, mixdown=True).squeeze()
+                    signal = audresample.resample(waveform, sr, 16000)
+                    audio = signal.squeeze()
+                elif False:
+                    from pydub import AudioSegment
+                    audio = AudioSegment.from_file(fname, format='wav')
+                    waveform = np.array(audio.get_array_of_samples())
+                    signal = audresample.resample(waveform, audio.frame_rate, 16000)
+                    signal = audresample.remix(
+                        signal,
+                        mixdown=True,
+                    )
+                    audio = signal.squeeze()
+                elif True:
+                    signal, source_rate = audiofile.read(fname)
+                    # signal = audresample.resample(signal, source_rate, 16000)
+                    audio = signal.squeeze()
+
+                else:
+                    audio, sr = librosa.load(fname, sr=16000, mono=True)
+                    audio = torch.tensor(audio).float().squeeze()
 
                 # turn 'begin': '00:00:39', 'end': '00:00:41' into seconds
                 begin_time = sum(x * int(t) for x, t in zip([3600, 60, 1], begin.split(":")))
@@ -200,12 +249,6 @@ class MyTrainer:
 
 
     def embed_audio_and_concatenate(self, batch, train=True):
-        """
-        TODO: here I need to figure out an intelligence way to concatenate
-              the response to the context ONLY during training
-              Also need to be sure that I'm not fucling up the masks... (as always)
-              This is the hardship of doing in batche manner
-        """
         BSZ = batch["input_ids"].size(0)
         if self.args.use_lora:
             embedded_text = self.model.model.model.embed_tokens(batch["input_ids"])
@@ -316,6 +359,7 @@ class MyTrainer:
         logging.info(f"LoRA Checkpoint Path: {self.args.lora_checkpoint_path}")
         logging.info(f"Max Length: {self.args.max_length}")
         logging.info(f"Max New Tokens: {self.args.max_new_tokens}")
+        logging.info(f"Audio Encoder Weight: {self.args.audio_encoder_weight}")
 
 
         if 'train' in self.args.mode:
@@ -332,7 +376,8 @@ class MyTrainer:
             logging.info(f"Epoch {epoch+1}/{self.args.epochs}")
 
             # Training loop.
-            self.audio_encoder.train()
+            if self.args.modality == "speech":
+                self.audio_encoder.train()
             self.optimizer.zero_grad()
 
             with tqdm(self.trainloader, unit="batch") as tepoch:
@@ -380,7 +425,8 @@ class MyTrainer:
             
 
     def validate(self, epoch):
-        self.audio_encoder.eval()
+        if self.args.modality == "speech":
+            self.audio_encoder.eval()
         self.model.eval()
         total_loss = 0
         num_batches = 0
@@ -416,7 +462,7 @@ class MyTrainer:
         save_path = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name, f"checkpoint_epoch_{epoch}_step_{self.step}.pt")
         torch.save(
             {
-                "audio_encoder": self.audio_encoder.state_dict(),
+                "audio_encoder": self.audio_encoder.state_dict() if self.args.modality == "speech" else None,
                 "optimizer": self.optimizer.state_dict(),
                 "lr_scheduler": self.lr_scheduler.state_dict(),
                 "epoch": epoch,
@@ -437,7 +483,8 @@ class MyTrainer:
 
     def test(self):
         logging.info("Running in test mode")
-        self.audio_encoder.eval()
+        if self.args.modality == "speech":
+            self.audio_encoder.eval()
         self.model.eval()
         total_loss = 0
         num_batches = 0
@@ -530,6 +577,27 @@ class MyTrainer:
         logging.info(f"Test accuracy (therapist): {accuracy_therapist}")
 
 
+        # write code to compute macro & micro f1s, along with class-wise f1s
+        # given generated_texts
+        # Extract the true labels and predicted labels
+        true_labels = [label.strip() for _, _, label, _ in generated_texts]
+        predicted_labels = [generated.strip() for _, generated, _, _ in generated_texts]
+
+        # Compute macro and micro F1 scores
+        macro_f1 = f1_score(true_labels, predicted_labels, average='macro')
+        micro_f1 = f1_score(true_labels, predicted_labels, average='micro')
+
+        logging.info(f"Macro F1 Score: {macro_f1}")
+        logging.info(f"Micro F1 Score: {micro_f1}")
+
+        # Compute class-wise F1 scores
+        class_wise_f1 = classification_report(true_labels, predicted_labels, output_dict=True)
+        logging.info(f"Class-wise F1 Scores: {class_wise_f1}")
+
+        # Log the detailed classification report
+        logging.info(f"Classification Report:\n{classification_report(true_labels, predicted_labels)}")
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='ML Experiment')
     parser.add_argument('--save_dir', type=str, default='/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/', help='Absolute path of the storage for checkpoints and logs')
@@ -561,6 +629,7 @@ def parse_arguments():
     parser.add_argument('--max_new_tokens', type=int, default=10, help='Maximum number of tokens to generate')
     parser.add_argument('--data_length', type=int, nargs=3, default=[-1, -1, -1], help='Data length for training, \
                         validation, and testing. -1 means use all data.')
+    parser.add_argument('--audio_encoder_weight', type=str, default="./data/speech_llm_audio_encoder.pt",  help='Path to the audio encoder weight')
     
     args = parser.parse_args()
     return args

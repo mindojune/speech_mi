@@ -50,7 +50,8 @@ def custom_datacollate(batch):
 def process(args, split=[0.8,0.05,0.15], print_examples=False):
     # args = { }
     if args.dataset == "annomi":
-        segfile = "data/segmental_information.json"
+        # segfile = "data/segmental_information.json"
+        segfile = "data/converted_segmental_information.json"
 
     with open(segfile, "r") as fh:
         seg = json.load(fh)
