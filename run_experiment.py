@@ -85,6 +85,10 @@ class MyTrainer:
                 if self.args.audio_encoder_weight:
                     self.audio_encoder.load_state_dict(torch.load(self.args.audio_encoder_weight, map_location=self.device),strict=False)
                     logging.info(f"Loaded audio encoder from {self.args.audio_encoder_weight}.\n")
+                if self.args.freeze_encoder:
+                    for param in self.audio_encoder.parameters():
+                        param.requires_grad = False
+                    logging.info("Freezing the audio encoder.")
             self.audio_encoder.to(self.device)
         self.model.to(self.device)
         self.feature_extractor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
@@ -147,8 +151,10 @@ class MyTrainer:
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         if self.args.modality == "speech":
             self.audio_encoder.load_state_dict(checkpoint["audio_encoder"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        
+        if self.args.mode == "train":
+            self.optimizer.load_state_dict(checkpoint["optimizer"])
+            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
         
         self.start_epoch = checkpoint["epoch"]
         self.step = checkpoint["step"]
@@ -280,10 +286,16 @@ class MyTrainer:
 
         unpadded_audio_embeds = padded_audio_embeds
 
-        num_audio_embeds = [compute_num_audio_embeds(
-            len_audio, sr=16000
-            ) + 1 for len_audio in torch.sum(batch["audio_attention_mask"], dim=-1).tolist() ]
-        unpadded_audio_embeds = pad_sequence([torch.cat([torch.Tensor(x[:y-1, :]), self.audio_encoder.eos_embedding],dim=0) for x,y in zip(unpadded_audio_embeds, num_audio_embeds)], batch_first=True).to(unpadded_audio_embeds.device)
+        if False:
+            num_audio_embeds = [compute_num_audio_embeds(
+                len_audio, sr=16000
+                ) + 1 for len_audio in torch.sum(batch["audio_attention_mask"], dim=-1).tolist() ]
+            unpadded_audio_embeds = pad_sequence([torch.cat([torch.Tensor(x[:y-1, :]), self.audio_encoder.eos_embedding],dim=0) for x,y in zip(unpadded_audio_embeds, num_audio_embeds)], batch_first=True).to(unpadded_audio_embeds.device)
+        else:
+            num_audio_embeds = [compute_num_audio_embeds(
+                len_audio, sr=16000
+                ) for len_audio in torch.sum(batch["audio_attention_mask"], dim=-1).tolist() ]
+            
         audio_mask = create_attention_mask(num_audio_embeds).to(unpadded_audio_embeds.device)
         
         # BSZ = self.args.batch_size
@@ -301,17 +313,36 @@ class MyTrainer:
 
         attention_mask_padded = torch.zeros((BSZ, max_length), dtype=torch.long).to(self.device)
 
-        # Fill in the text and audio sequences
-        for i in range(BSZ):
-            text_len = int(text_lengths[i].item())
-            audio_len = int(audio_lengths[i].item())
+        if False:
+            # Fill in the text and audio sequences
+            for i in range(BSZ):
+                text_len = int(text_lengths[i].item())
+                audio_len = int(audio_lengths[i].item())
 
-            embedded_text_padded[i, :text_len] = embedded_text[i, :text_len]
-            embedded_text_padded[i, text_len:text_len + audio_len] = unpadded_audio_embeds[i, :audio_len]
+                embedded_text_padded[i, :text_len] = embedded_text[i, :text_len]
+                embedded_text_padded[i, text_len:text_len + audio_len] = unpadded_audio_embeds[i, :audio_len]
 
-            attention_mask_padded[i, :text_len] = batch["attention_mask"][i, :text_len]
-            attention_mask_padded[i, text_len:text_len + audio_len] = audio_mask[i, :audio_len]
+                attention_mask_padded[i, :text_len] = batch["attention_mask"][i, :text_len]
+                attention_mask_padded[i, text_len:text_len + audio_len] = audio_mask[i, :audio_len]
 
+
+        elif True:
+            # Rearrange embedded_text_padded and attention_mask_padded so that they are left padded
+            for i in range(BSZ):
+                text_len = int(text_lengths[i].item())
+                audio_len = int(audio_lengths[i].item())
+                total_len = text_len + audio_len
+                start_pos = max_length - total_len
+
+                # Shift the text embeddings and audio embeddings to the right
+                embedded_text_padded[i, start_pos:start_pos + text_len] = embedded_text[i, :text_len]
+                embedded_text_padded[i, start_pos + text_len:start_pos + total_len] = unpadded_audio_embeds[i, :audio_len]
+
+                # Shift the attention masks to the right
+                attention_mask_padded[i, start_pos:start_pos + text_len] = batch["attention_mask"][i, :text_len]
+                attention_mask_padded[i, start_pos + text_len:start_pos + total_len] = audio_mask[i, :audio_len]
+
+                
         if train:
             # concatenate the response to the context
             response_input_ids = batch["labels"]
@@ -360,6 +391,7 @@ class MyTrainer:
         logging.info(f"Max Length: {self.args.max_length}")
         logging.info(f"Max New Tokens: {self.args.max_new_tokens}")
         logging.info(f"Audio Encoder Weight: {self.args.audio_encoder_weight}")
+        logging.info(f"Freeze Encoder: {self.args.freeze_encoder}")
 
 
         if 'train' in self.args.mode:
@@ -630,7 +662,7 @@ def parse_arguments():
     parser.add_argument('--data_length', type=int, nargs=3, default=[-1, -1, -1], help='Data length for training, \
                         validation, and testing. -1 means use all data.')
     parser.add_argument('--audio_encoder_weight', type=str, default="./data/speech_llm_audio_encoder.pt",  help='Path to the audio encoder weight')
-    
+    parser.add_argument('--freeze_encoder', action='store_true', default=False, help='Freeze the encoder')
     args = parser.parse_args()
     return args
 

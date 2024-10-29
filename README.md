@@ -1,17 +1,31 @@
 # Speech MI - DJ 2024 Fall Project
 
 ## TODOs
+- 241029
+    - no eos: doesn't seem to be helping a lot
+    - left padding aligned: does seem to be helping!!!!
+    
 - 241025
-    The performance of the speech model does not seem too competitive...
-    This could be because we're jointly training the speech adapter and the lora model
-    Thus first try to train the speech adapter then move on?
-    but note I'm using a pretrained speech adapter..
-        actually not as of now (241024),
-        so make the change TODO []
-    make the training go faster? 
+    - speech loss converges at a high level compared to text loss
+        possibilities
+            - some bug in the code for speech processing
+            - because we need to train more (speech adapter + lora) so it's kinda expected
+                - freeze adapter (so that it doesn't have to be trained, but important that we use the pretrained one) [todo]
+                - train longer [doing]
+
+    - The performance of the speech model does not seem too competitive...
+        This could be because we're jointly training the speech adapter and the lora model
+        Thus first try to train the speech adapter then move on?
+        but note I'm using a pretrained speech adapter..
+            actually not as of now (241024),
+            so make the change TODO [done!]
+            ==> this didn't seem to help much
+    
+    - make the training go faster? [done!]
         ==> see if dummy data goes fasta (how much)
             - with real data 3s per batch (bsz = 2)
             - with dummy data 
+        
 - before 241025
     - finish the code with all the fixins (validation, test, and saving and such) [first pass]
     - do test runs and make sure all is functional [v] 241023 afternoon
