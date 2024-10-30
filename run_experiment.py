@@ -1,6 +1,7 @@
 import os
 os.environ['HF_HOME'] = '/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/.cache'
 import sys
+import json
 import argparse
 import logging
 from tqdm.auto import tqdm
@@ -566,18 +567,19 @@ class MyTrainer:
 
                         generated_texts.extend(zip(prompt, decoded_output, decoded_labels, interlocutors))
 
-                        loss = self.model(
-                            inputs_embeds=input_embeds,
-                            labels=response_input_ids,
-                            output_hidden_states=True,
-                            attention_mask=attention_mask,
-                        ).loss
-                        tepoch.set_postfix(loss=loss.item())
-                        total_loss += loss.item()
+                        if False:
+                            loss = self.model(
+                                inputs_embeds=input_embeds,
+                                labels=response_input_ids,
+                                output_hidden_states=True,
+                                attention_mask=attention_mask,
+                            ).loss
+                            tepoch.set_postfix(loss=loss.item())
+                            total_loss += loss.item()
                         num_batches += 1
 
-        avg_loss = total_loss / num_batches
-        logging.info(f"Test loss: {avg_loss}")
+        #avg_loss = total_loss / num_batches
+        #logging.info(f"Test loss: {avg_loss}")
         logging.info(f"Generated texts and labels: {generated_texts}")
         # compute accuracy and log
         correct = 0.0
@@ -630,6 +632,31 @@ class MyTrainer:
         logging.info(f"Classification Report:\n{classification_report(true_labels, predicted_labels)}")
 
 
+        
+        # save all this into a json file
+        # save_path = os.path.join("experiment", self.args.run_name, "test_results.json")
+        log_dir = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name, "test_results.json")
+        # added formatted generated_texts
+        formatted_generated_texts = []
+        for prompt, generated, label, interlocutor in generated_texts:
+            formatted_generated_texts.append({
+                "prompt": prompt,
+                "generated": generated,
+                "label": label,
+                "interlocutor": interlocutor
+            })
+        dic ={
+                "accuracy": accuracy,
+                "accuracy_client": accuracy_client,
+                "accuracy_therapist": accuracy_therapist,
+                "macro_f1": macro_f1,
+                "micro_f1": micro_f1,
+                "class_wise_f1": class_wise_f1
+            }
+        dic["generated_texts"] = formatted_generated_texts
+        with open(log_dir, 'w') as f:
+            json.dump(dic, f, indent=4)
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='ML Experiment')
     parser.add_argument('--save_dir', type=str, default='/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/', help='Absolute path of the storage for checkpoints and logs')
@@ -655,7 +682,7 @@ def parse_arguments():
     parser.add_argument('--modality', type=str, choices=['speech', 'text'], required=True, help='Data mode to use (speech or text)')
     parser.add_argument('--max_audio_s', default=100, type=int, help='Maximum number of seconds to use for audio')
     parser.add_argument('--datatype', type=str, default='float16', help='Data type to use for training')
-    parser.add_argument('--use_lora', action='store_true', default=True, help='Use LoRA for model adaptation')
+    parser.add_argument('--use_lora', action="store_true", help='Use LoRA for model adaptation')
     parser.add_argument('--lora_checkpoint_path', type=str, help='Path to the LoRA checkpoint')
     parser.add_argument('--max_length', type=int, default=512, help='Maximum length of the input sequence')
     parser.add_argument('--max_new_tokens', type=int, default=10, help='Maximum number of tokens to generate')

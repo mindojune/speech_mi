@@ -3,8 +3,28 @@
 ## TODOs
 - 241029
     - no eos: doesn't seem to be helping a lot
-    - left padding aligned: does seem to be helping!!!!
-    
+
+    - left padding aligned: does seem to be helping!!!! [done, but helpfulness limited]
+        - it does help but at epoch5 the performance gap is still there
+        - it only marginally helps
+
+    - so really need to figure out what's going on [todo]
+        - trying with train bsz = 1 to make sure the bsz isn't the problem [better model, but not full catchup]
+            let's wait and see...
+        - try with freeze_encoder, learning_rate 1e-4 [todo]
+        - don't use lora, just train encoder... [doing]
+            - if not good enough, train the lora with the trained encoder [todo]
+        - other possibilities
+            - something wrong with the audio processing
+                - different sr or something
+                - timestamp is not good
+            - 3b not nuff go 7b?
+        - minor change test: after speech, in front of label add a special token [todo]
+            - probably not essential but could help with the training
+                (i did with the eos embedding) no help
+                but add [cls]
+
+        
 - 241025
     - speech loss converges at a high level compared to text loss
         possibilities
