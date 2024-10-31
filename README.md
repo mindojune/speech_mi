@@ -1,7 +1,154 @@
 # Speech MI - DJ 2024 Fall Project
 
 ## TODOs
-- 241029
+
+
+- 241031 cont from dojmin@gl-login3 
+    - STATUS: PADDING BUG THAT LEAD TO DIFF BSZ WITH DIFF RESULT IS .... FIXED MOOFOOGASSSSSS!!!!
+    - MAIN Lesson: I'm definitely messing something up with the padding
+                    MOST LIKELY in embed_audio_and_concatenate
+                    and MOST LIKELY during the concatenation part (of text and audio)
+    - new_info: yes it's something related to bsz
+        - IS it in the left padding alignment? L326 "if True..."
+            ==> BSZ 1
+                    accuracy                           0.71       663
+                    macro avg       0.52      0.47      0.47       663
+                    weighted avg       0.71      0.71      0.68       663
+                BSZ 4
+                    accuracy                           0.62       663
+                    macro avg       0.25      0.23      0.23       663
+                    weighted avg       0.62      0.62      0.60       663
+            ==> fixed and 12 samples
+                BSZ = 1
+                    accuracy                           0.83        12
+                    macro avg       0.46      0.46      0.45        12
+                    weighted avg       0.85      0.83      0.83        12
+
+                    
+                BSZ = 2
+                    accuracy                           0.83        12
+                    macro avg       0.46      0.46      0.45        12
+                    weighted avg       0.85      0.83      0.83        12
+
+                BSZ = 4
+                    accuracy                           0.83        12
+                    macro avg       0.46      0.46      0.45        12
+                    weighted avg       0.85      0.83      0.83        12
+            ==> fixed and full samples
+                BSZ = 1 
+                    accuracy                           0.71       663
+                    macro avg       0.52      0.47      0.47       663
+                    weighted avg       0.71      0.71      0.68       663
+                BSZ = 2
+                accuracy                           0.71       663
+                macro avg       0.52      0.47      0.47       663
+                weighted avg       0.71      0.71      0.68       663
+
+                BSZ = 4
+
+
+
+
+        - EVIDENCE: same model, different test_batch_size leads to WILDY different results
+        BSZ = 4
+                accuracy                           0.65       663
+                macro avg       0.61      0.64      0.61       663
+                weighted avg       0.69      0.65      0.66       663
+
+
+        BSZ = 2
+                accuracy                           0.67       663
+                macro avg       0.54      0.57      0.54       663
+                weighted avg       0.71      0.67      0.68       663
+
+                
+        BSZ = 1
+                accuracy                           0.73       663
+                macro avg       0.68      0.70      0.68       663
+                weighted avg       0.76      0.73      0.73       663
+
+        different model 1e-4 without eos
+        BSZ = 2
+                accuracy                           0.67        12
+                macro avg       0.31      0.25      0.26        12
+                weighted avg       0.85      0.67      0.71        12
+
+        BSZ = 1
+                accuracy                           0.83        12
+                macro avg       0.46      0.46      0.45        12
+                weighted avg       0.85      0.83      0.83        12
+
+        FINAL test, if this phenom persists in text mode.... 
+            if yes then problem could be in shared code
+            if not the problem is in speech exclusive part
+        text, BSZ = 4
+
+            accuracy                           0.69       663
+            macro avg       0.72      0.58      0.58       663
+            weighted avg       0.74      0.69      0.67       663
+
+
+        text, BSZ = 2
+
+            accuracy                           0.69       663
+            macro avg       0.72      0.58      0.58       663
+            weighted avg       0.74      0.69      0.67       663
+
+
+        text, BSZ = 1
+            accuracy                           0.69       663
+            macro avg       0.72      0.58      0.58       663
+            weighted avg       0.74      0.69      0.66       663
+
+         ==> so yeah it's most def somethign wrong with  BSZ = masking, padding of the AUDIO part (subhanallah)
+    - yes eos
+        - ?
+    - still the best performance is on frozen encoder + 1e-4 lora
+    - args.max_length = 512 [todo]
+        - see if the audio is too long and thus cutting information
+        ******************************
+        inside embed_audio_and_concatenate
+        input_ids: torch.Size([1, 355])
+        input_features: torch.Size([1, 73, 3072])
+        2%|██▏                                                                                                                                                  | 10/663 [00:03<03:34,  3.04batch/s]******************************
+        inside embed_audio_and_concatenate
+        input_ids: torch.Size([1, 401])
+        input_features: torch.Size([1, 98, 3072])
+        2%|██▍                                                                                                                                                  | 11/663 [00:03<03:35,  3.02batch/s]******************************
+        inside embed_audio_and_concatenate
+        input_ids: torch.Size([1, 406])
+        input_features: torch.Size([1, 23, 3072])
+        2%|██▋                                                                                                                                                  | 12/663 [00:04<03:34,  3.04batch/s]
+        ******************************
+        inside embed_audio_and_concatenate
+        input_ids: torch.Size([1, 490])
+        input_features: torch.Size([1, 186, 3072])
+        2%|██▉                                                                                                                                                  | 13/663 [00:04<03:42,  2.92batch/s]
+        ******************************
+        inside embed_audio_and_concatenate
+        input_ids: torch.Size([1, 512])
+        input_features: torch.Size([1, 336, 3072])
+        2%|███▏                                                                                                                                                 | 14/663 [00:04<03:51,  2.80batch/s]
+        ******************************
+        inside embed_audio_and_concatenate
+        input_ids: torch.Size([1, 512])
+        input_features: torch.Size([1, 36, 3072])
+        2%|███▎                                                                                                                                                 | 15/663 [00:05<03:48,  2.84batch/s]
+        ******************************
+        inside embed_audio_and_concatenate
+        input_ids: torch.Size([1, 512])
+        input_features: torch.Size([1, 123, 3072])
+        2%|███▌                                                                                                                                                 | 16/663 [00:05<03:46,  2.85batch/s]
+        ******************************
+        inside embed_audio_and_concatenate
+        input_ids: torch.Size([1, 512])
+        input_features: torch.Size([1, 36, 3072])
+
+
+    - i am skipping resampling now since i already converted
+        - but we can turn it back on to see it help with loss [todo]
+
+- 241029-30
     - no eos: doesn't seem to be helping a lot
 
     - left padding aligned: does seem to be helping!!!! [done, but helpfulness limited]
@@ -11,8 +158,8 @@
     - so really need to figure out what's going on [todo]
         - trying with train bsz = 1 to make sure the bsz isn't the problem [better model, but not full catchup]
             let's wait and see...
-        - try with freeze_encoder, learning_rate 1e-4 [todo]
-        - don't use lora, just train encoder... [doing]
+        - try with freeze_encoder, learning_rate 1e-4 [doesn't seem to help alot]
+        - don't use lora, just train encoder... [doesn't seem to help alot]
             - if not good enough, train the lora with the trained encoder [todo]
         - other possibilities
             - something wrong with the audio processing

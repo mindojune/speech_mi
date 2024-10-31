@@ -108,6 +108,7 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
                 continue
             if context[-1]["begin"] >= context[-1]["end"]:
                 continue
+            # consider skipping when the time difference is small
             pairs.append({"context": context, "target": target})
         return pairs
 
