@@ -2,10 +2,10 @@
 # 2 / 18000
 
 
-epoch=8
-step=28000 #40000 #50000
+epoch=9
+step=34000 #40000 #50000
 runname=speech_epoch_${epoch}_step_${step}
-savename=speech_241031_lr1e4_frozen #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
+savename=speech_241031_lr1e4_frozen_eos_padding_bug_fixed #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
 checkname=checkpoint_epoch_${epoch}_step_${step}.pt
 loraname=lora_checkpoint_epoch_${epoch}_step_${step}
 speech_checkpoint_path=/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/classification_experiment/${savename}/${checkname}

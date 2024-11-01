@@ -4,10 +4,9 @@
 
 
 - 241031 cont from dojmin@gl-login3 
-    - STATUS: PADDING BUG THAT LEAD TO DIFF BSZ WITH DIFF RESULT IS .... FIXED MOOFOOGASSSSSS!!!!
     - MAIN Lesson: I'm definitely messing something up with the padding
                     MOST LIKELY in embed_audio_and_concatenate
-                    and MOST LIKELY during the concatenation part (of text and audio)
+                    and MOST LIKELY during the concatenation part (of text and audio) [FIXED]
     - new_info: yes it's something related to bsz
         - IS it in the left padding alignment? L326 "if True..."
             ==> BSZ 1
@@ -40,11 +39,15 @@
                     macro avg       0.52      0.47      0.47       663
                     weighted avg       0.71      0.71      0.68       663
                 BSZ = 2
-                accuracy                           0.71       663
-                macro avg       0.52      0.47      0.47       663
-                weighted avg       0.71      0.71      0.68       663
+                    accuracy                           0.71       663
+                    macro avg       0.52      0.47      0.47       663
+                    weighted avg       0.71      0.71      0.68       663
 
                 BSZ = 4
+                    accuracy                           0.71       663
+                    macro avg       0.52      0.47      0.47       663 
+                    weighted avg       0.71      0.71      0.68       663
+
 
 
 
@@ -100,7 +103,7 @@
             macro avg       0.72      0.58      0.58       663
             weighted avg       0.74      0.69      0.66       663
 
-         ==> so yeah it's most def somethign wrong with  BSZ = masking, padding of the AUDIO part (subhanallah)
+         ==> so yeah it's most def somethign wrong with  BSZ = masking, padding of the AUDIO part
     - yes eos
         - ?
     - still the best performance is on frozen encoder + 1e-4 lora
