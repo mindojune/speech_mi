@@ -2,15 +2,18 @@
 
 ## Larnell TODOs
 
-Before: Please understand that there are hardcoded paths in the code. You will need to change them to your own paths.
-Also never remove or move any files or scripts in my paths, which
+### Before
+Please understand that there are hardcoded paths in the code. You will need to change them to your own paths.
+Also __never remove or move any files or scripts in my paths__, which
 are 
 - `/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/`
 - `/nfs/turbo/coe-mihalcea/dojmin/speech_mi`
 
+### Steps
+
 0. Go over the scripts briefly and get a high-level understanding of what's going on. 
 `run_experiment.py` is the main script that runs the experiments so it should be your entry point.
-__Your goal__ is to be able to describe what each script and each function does at a high level.
+__Your goal__ is to be able to __describe what each script and each function does at a high level__.
 
 1. Get a GPU allocation (inside a screen or tmux session) with something like
 
