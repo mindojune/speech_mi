@@ -2,6 +2,13 @@
 
 ## Larnell TODOs
 
+
+### Possible Dataset: ``MELD: A Multimodal Multi-Party Dataset for Emotion Recognition in Conversation``
+ 
+- [MELD](https://github.com/declare-lab/MELD)
+
+Try if we can use this dataset for the project.
+
 ### Before
 Please understand that there are hardcoded paths in the code. You will need to change them to your own paths.
 Also __never remove or move any files or scripts in my paths__, which
