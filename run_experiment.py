@@ -21,7 +21,7 @@ from process_data import process
 from log_writer import LogWriter 
 from audio_encoder import AudioEncoder
 from audio_llama import AudioLlamaForCausalLM
-from utils import set_all_seeds, create_attention_mask, compute_num_audio_embeds
+from utils import set_all_seeds, create_attention_mask, compute_num_audio_embeds, add_noise
 import librosa
 from peft import PeftConfig, PeftModel
 
@@ -234,6 +234,8 @@ class MyTrainer:
                     # skipping resampling bc it's already 16k
                     # signal = audresample.resample(signal, source_rate, 16000)
                     audio = signal.squeeze()
+                    if self.args.noise_level > 0.0:
+                        audio = add_noise(audio, 16000, self.args.noise_level, self.device)
 
                 else:
                     audio, sr = librosa.load(fname, sr=16000, mono=True)
@@ -412,6 +414,7 @@ class MyTrainer:
         logging.info(f"Audio Encoder Weight: {self.args.audio_encoder_weight}")
         logging.info(f"Freeze Encoder: {self.args.freeze_encoder}")
         logging.info(f"Use Audio EOS: {self.args.use_audio_eos}")
+        logging.info(f"Noise Level: {self.args.noise_level}")
 
 
         if 'train' in self.args.mode:
@@ -713,6 +716,7 @@ def parse_arguments():
     parser.add_argument('--audio_encoder_weight', type=str, default="./data/speech_llm_audio_encoder.pt",  help='Path to the audio encoder weight')
     parser.add_argument('--freeze_encoder', action='store_true', default=False, help='Freeze the encoder')
     parser.add_argument('--use_audio_eos', action='store_true', default=False, help='Use audio eos')
+    parser.add_argument('--noise_level', type=float, default=0.0, help='Noise level for audio augmentation')
     args = parser.parse_args()
     return args
 
