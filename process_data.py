@@ -2,8 +2,9 @@
 import json
 import random
 import torch
+from functools import partial
 
-def custom_datacollate(batch):
+def custom_datacollate(batch, task="classification"):
     """
     Collate function to process audio and other necessary data.
     TODO: audio processing and feeding ...
@@ -19,17 +20,21 @@ def custom_datacollate(batch):
     for c, t in zip(context, target):
         # Interleave utterance_text from context
         interleaved_text = "\n".join([f"{utterance['interlocutor']}: {utterance['utterance_text']}" for utterance in c])
+
         # add a special token to separate the context from the target
         interleaved_text += f"\n[SEP]\n"  # change introduced on 241024 
-        # inputs.append(interleaved_text)
-
-        # Determine the label based on the interlocutor
-        if t["interlocutor"] == "therapist":
-            #labels.append(t["main_therapist_behaviour"])
-            label = t["main_therapist_behaviour"]
+        
+        if task == "response_generation":
+            interleaved_text += t["interlocutor"] + ": "
+            label = t["utterance_text"]
         else:
-            # labels.append(t["client_talk_type"])
-            label = t["client_talk_type"]
+            # Determine the label based on the interlocutor
+            if t["interlocutor"] == "therapist":
+                #labels.append(t["main_therapist_behaviour"])
+                label = t["main_therapist_behaviour"]
+            else:
+                # labels.append(t["client_talk_type"])
+                label = t["client_talk_type"]
         label += "\n[CLS]"
         # interleaved_text += " " + label # don't do this here 
         
@@ -102,6 +107,10 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
             elif args.task == "forecasting":
                 context = session[:i]
                 target = session[i]
+            elif args.task == "response_generation":
+                # raise NotImplementedError
+                context = session[:i]
+                target = session[i]
                 # pairs.append({"context": context, "target": target})
             # if begin == end for last item of context, skip or also skip when either of them is None
             if context[-1]["begin"] == context[-1]["end"] or context[-1]["begin"] is None or context[-1]["end"] is None:
@@ -135,6 +144,8 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
         train_data = train_data[:train_len]
         dev_data = dev_data[:dev_len]
         test_data = test_data[:test_len]
+
+    custom_datacollate = partial(custom_datacollate, task=args.task)
 
     trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=custom_datacollate)
     devloader = torch.utils.data.DataLoader(dev_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate)

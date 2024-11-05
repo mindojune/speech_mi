@@ -601,76 +601,81 @@ class MyTrainer:
         #logging.info(f"Test loss: {avg_loss}")
         logging.info(f"Generated texts and labels: {generated_texts}")
         # compute accuracy and log
-        correct = 0.0
-        total = 0.0
-        correct_client = 0.0
-        total_client = 0.0
-        correct_therapist = 0.0
-        total_therapist = 0.0
 
-        for prompt, generated, label, interlocutor in generated_texts:
-            if generated.strip() == label.strip():
-                correct += 1
+        if self.args.task == "response_generation":
+            raise NotImplementedError("Response generation task not implemented yet.")
+            return
+        else:
+            correct = 0.0
+            total = 0.0
+            correct_client = 0.0
+            total_client = 0.0
+            correct_therapist = 0.0
+            total_therapist = 0.0
+
+            for prompt, generated, label, interlocutor in generated_texts:
+                if generated.strip() == label.strip():
+                    correct += 1
+                    if interlocutor == "client":
+                        correct_client += 1
+                    elif interlocutor == "therapist":
+                        correct_therapist += 1
                 if interlocutor == "client":
-                    correct_client += 1
+                    total_client += 1
                 elif interlocutor == "therapist":
-                    correct_therapist += 1
-            if interlocutor == "client":
-                total_client += 1
-            elif interlocutor == "therapist":
-                total_therapist += 1
-            total += 1
+                    total_therapist += 1
+                total += 1
 
-        accuracy = correct / total if total > 0 else 0
-        accuracy_client = correct_client / total_client if total_client > 0 else 0
-        accuracy_therapist = correct_therapist / total_therapist if total_therapist > 0 else 0
+            accuracy = correct / total if total > 0 else 0
+            accuracy_client = correct_client / total_client if total_client > 0 else 0
+            accuracy_therapist = correct_therapist / total_therapist if total_therapist > 0 else 0
 
-        logging.info(f"Test accuracy: {accuracy}")
-        logging.info(f"Test accuracy (client): {accuracy_client}")
-        logging.info(f"Test accuracy (therapist): {accuracy_therapist}")
+            logging.info(f"Test accuracy: {accuracy}")
+            logging.info(f"Test accuracy (client): {accuracy_client}")
+            logging.info(f"Test accuracy (therapist): {accuracy_therapist}")
 
 
-        # write code to compute macro & micro f1s, along with class-wise f1s
-        # given generated_texts
-        # Extract the true labels and predicted labels
-        true_labels = [label.strip() for _, _, label, _ in generated_texts]
-        predicted_labels = [generated.strip() for _, generated, _, _ in generated_texts]
+            # write code to compute macro & micro f1s, along with class-wise f1s
+            # given generated_texts
+            # Extract the true labels and predicted labels
+            true_labels = [label.strip() for _, _, label, _ in generated_texts]
+            predicted_labels = [generated.strip() for _, generated, _, _ in generated_texts]
 
-        # Compute macro and micro F1 scores
-        macro_f1 = f1_score(true_labels, predicted_labels, average='macro')
-        micro_f1 = f1_score(true_labels, predicted_labels, average='micro')
+            # Compute macro and micro F1 scores
+            macro_f1 = f1_score(true_labels, predicted_labels, average='macro')
+            micro_f1 = f1_score(true_labels, predicted_labels, average='micro')
 
-        logging.info(f"Macro F1 Score: {macro_f1}")
-        logging.info(f"Micro F1 Score: {micro_f1}")
+            logging.info(f"Macro F1 Score: {macro_f1}")
+            logging.info(f"Micro F1 Score: {micro_f1}")
 
-        # Compute class-wise F1 scores
-        class_wise_f1 = classification_report(true_labels, predicted_labels, output_dict=True)
-        logging.info(f"Class-wise F1 Scores: {class_wise_f1}")
+            # Compute class-wise F1 scores
+            class_wise_f1 = classification_report(true_labels, predicted_labels, output_dict=True)
+            logging.info(f"Class-wise F1 Scores: {class_wise_f1}")
 
-        # Log the detailed classification report
-        logging.info(f"Classification Report:\n{classification_report(true_labels, predicted_labels)}")
+            # Log the detailed classification report
+            logging.info(f"Classification Report:\n{classification_report(true_labels, predicted_labels)}")
 
-        # save all this into a json file
-        # save_path = os.path.join("experiment", self.args.run_name, "test_results.json")
-        log_dir = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name, "test_results.json")
-        # added formatted generated_texts
-        formatted_generated_texts = []
-        for prompt, generated, label, interlocutor in generated_texts:
-            formatted_generated_texts.append({
-                "prompt": prompt,
-                "generated": generated,
-                "label": label,
-                "interlocutor": interlocutor
-            })
-        dic ={
-                "accuracy": accuracy,
-                "accuracy_client": accuracy_client,
-                "accuracy_therapist": accuracy_therapist,
-                "macro_f1": macro_f1,
-                "micro_f1": micro_f1,
-                "class_wise_f1": class_wise_f1
-            }
-        dic["generated_texts"] = formatted_generated_texts
+            # save all this into a json file
+            # save_path = os.path.join("experiment", self.args.run_name, "test_results.json")
+            log_dir = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name, "test_results.json")
+            # added formatted generated_texts
+            formatted_generated_texts = []
+            for prompt, generated, label, interlocutor in generated_texts:
+                formatted_generated_texts.append({
+                    "prompt": prompt,
+                    "generated": generated,
+                    "label": label,
+                    "interlocutor": interlocutor
+                })
+            dic ={
+                    "accuracy": accuracy,
+                    "accuracy_client": accuracy_client,
+                    "accuracy_therapist": accuracy_therapist,
+                    "macro_f1": macro_f1,
+                    "micro_f1": micro_f1,
+                    "class_wise_f1": class_wise_f1
+                }
+            dic["generated_texts"] = formatted_generated_texts
         with open(log_dir, 'w') as f:
             json.dump(dic, f, indent=4)
 
@@ -689,7 +694,7 @@ def parse_arguments():
     parser.add_argument('--log_interval', type=int, default=1, help='Interval for logging')
     parser.add_argument('--model', type=str, default='GeneZC/MiniChat-2-3B', help='Model architecture to use')
     parser.add_argument('--dataset', type=str, default='annomi', help='Dataset to use for training')
-    parser.add_argument('--task', type=str, default='classification', help='Task type (e.g., classification, forecasting)')
+    parser.add_argument('--task', type=str, default='classification', help='Task type (e.g., classification, forecasting, response_generation)')
     parser.add_argument('--mode', type=str, nargs='+', choices=['train', 'test'], default=['train'], help='Mode to run the experiment (train and/or test)')
     parser.add_argument('--run_name', type=str, required=True, help='Name of the run for logging')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
