@@ -234,8 +234,7 @@ class MyTrainer:
                     # skipping resampling bc it's already 16k
                     # signal = audresample.resample(signal, source_rate, 16000)
                     audio = signal.squeeze()
-                    if self.args.noise_level > 0.0:
-                        audio = add_noise(audio, 16000, self.args.noise_level, self.device)
+
 
                 else:
                     audio, sr = librosa.load(fname, sr=16000, mono=True)
@@ -248,6 +247,14 @@ class MyTrainer:
                 audio = audio[begin_time * 16000:end_time * 16000]
                 if self.args.max_audio_s:
                     audio = audio[:self.args.max_audio_s*16000]  
+                
+                if self.args.noise_level == -666:
+                    # replace the audio with zero
+                    audio = np.zeros_like(audio)
+                elif self.args.noise_level >= 0.0:
+                    # unsqueeze  np array
+                    audio = audio[None, :]
+                    audio = add_noise(audio, 16000, self.args.noise_level, self.device).squeeze()
 
                 audio_feature = self.feature_extractor(audio, sampling_rate=16000, return_tensors="pt", padding="longest", return_attention_mask=True )
                 audio_features += [audio_feature]
@@ -414,7 +421,7 @@ class MyTrainer:
         logging.info(f"Audio Encoder Weight: {self.args.audio_encoder_weight}")
         logging.info(f"Freeze Encoder: {self.args.freeze_encoder}")
         logging.info(f"Use Audio EOS: {self.args.use_audio_eos}")
-        logging.info(f"Noise Level: {self.args.noise_level}")
+        logging.info(f"Noise Level (SNR): {self.args.noise_level}")
 
 
         if 'train' in self.args.mode:
@@ -716,7 +723,7 @@ def parse_arguments():
     parser.add_argument('--audio_encoder_weight', type=str, default="./data/speech_llm_audio_encoder.pt",  help='Path to the audio encoder weight')
     parser.add_argument('--freeze_encoder', action='store_true', default=False, help='Freeze the encoder')
     parser.add_argument('--use_audio_eos', action='store_true', default=False, help='Use audio eos')
-    parser.add_argument('--noise_level', type=float, default=0.0, help='Noise level for audio augmentation')
+    parser.add_argument('--noise_level', type=float, default=-1, help='Noise level in Signal-to-Noise (SNR) Ratio for audio augmentation')
     args = parser.parse_args()
     return args
 

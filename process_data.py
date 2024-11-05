@@ -145,11 +145,11 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
         dev_data = dev_data[:dev_len]
         test_data = test_data[:test_len]
 
-    custom_datacollate = partial(custom_datacollate, task=args.task)
+    custom_datacollate_task = partial(custom_datacollate, task=args.task)
 
-    trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=custom_datacollate)
-    devloader = torch.utils.data.DataLoader(dev_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate)
-    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate)
+    trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=custom_datacollate_task)
+    devloader = torch.utils.data.DataLoader(dev_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate_task)
+    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate_task)
 
     # TEST SAMPLING FROM DEVLOADER
     if print_examples:

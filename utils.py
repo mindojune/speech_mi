@@ -53,12 +53,13 @@ def compute_num_audio_embeds(audio_samples, sr=16000):
 def add_noise(wavform, sr, snr, device=None):
     with torch.no_grad():
         if type(wavform) != torch.Tensor:
-            wavform = torch.Tensor(wavform)
+            wavform = torch.Tensor(wavform)        
         noise = torch.normal(torch.zeros(wavform.shape[0],wavform.shape[-1]), torch.ones(wavform.shape[0],wavform.shape[-1]))
         snr_dbs = torch.tensor([snr]) 
         if device:
             wavform = wavform.to(device)
             noise = noise.to(device)
             snr_dbs = snr_dbs.to(device)
+        # print(wavform.shape, noise.shape, snr_dbs)
         noised = torchaudio.functional.add_noise(torch.Tensor(wavform), torch.Tensor(noise), snr=snr_dbs)[0]
     return noised
