@@ -623,8 +623,8 @@ class MyTrainer:
 
             results = []
             for prompt, generated, label, interlocutor in generated_texts:
-                g = generated.split("\n")[0]
-                c = label.split("\n")[0]
+                g = generated#.split("\n")[0]
+                c = label#.split("\n")[0]
 
                 bleu_score = bleu.compute(predictions=[g], references=[[c]])["bleu"] if g != "" else 0 
                 rouge_score = rouge.compute(predictions=[g], references=[c])["rougeL"] 
@@ -640,6 +640,7 @@ class MyTrainer:
                     "meteor": meteor_score,
                     "bertscore": bertscore_score
                 }
+                results.append(res_dic)
 
             # compute average scores
             avg_bleu = np.mean([res["bleu"] for res in results])

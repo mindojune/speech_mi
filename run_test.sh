@@ -2,6 +2,40 @@
 # 2 / 18000
 
 ##################################################################
+# annomi response_generation speech [training]
+epoch=5
+step=20000 #40000 #50000
+runname=speech_epoch_${epoch}_step_${step}_response_generation
+savename=speech_241108_lr1e4_frozen_eos_padding_bug_fixed #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
+checkname=checkpoint_epoch_${epoch}_step_${step}.pt
+loraname=lora_checkpoint_epoch_${epoch}_step_${step}
+speech_checkpoint_path=/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/response_generation_experiment/${savename}/${checkname}
+speech_lora_checkpoint_path=/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/response_generation_experiment/${savename}/${loraname}
+
+python run_experiment.py --mode test --modality speech \
+    --run_name test_${runname} --test_batch_size 2 \
+    --datatype float16 --steps 50000 --data_length -1 -1 -1 --validation_interval 2000 \
+    --checkpoint_path $speech_checkpoint_path \
+    --lora_checkpoint_path $speech_lora_checkpoint_path --use_lora  --use_audio_eos --task response_generation
+
+##################################################################
+# annomi response_generation text [training]    
+epoch=5
+step=18000 #40000 #50000
+runname=text_epoch_${epoch}_step_${step}_response_generation
+savename=text_241108_lr1e4_frozen_eos_padding_bug_fixed #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
+checkname=checkpoint_epoch_${epoch}_step_${step}.pt
+loraname=lora_checkpoint_epoch_${epoch}_step_${step}
+speech_checkpoint_path=/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/response_generation_experiment/${savename}/${checkname}
+speech_lora_checkpoint_path=/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/response_generation_experiment/${savename}/${loraname}
+
+python run_experiment.py --mode test --modality text \
+    --run_name test_${runname} --test_batch_size 2 \
+    --datatype float16 --steps 50000 --data_length -1 -1 -1 --validation_interval 2000 \
+    --lora_checkpoint_path $speech_lora_checkpoint_path --use_lora  --use_audio_eos --task response_generation
+
+
+##################################################################
 # annomi classification speech [trained] speech_241031_lr1e4_frozen_eos_padding_bug_fixed
 epoch=9
 step=34000 #40000 #50000
