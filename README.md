@@ -1,5 +1,9 @@
 # Speech MI 2024 Fall Project
 
+
+## Note: I've been training testing with = low quality sessions included....
+so this may need to change
+
 ## Larnell TODOs
 
 

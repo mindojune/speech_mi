@@ -2,44 +2,50 @@
 
 # bsz 4 don't work 2 ok
 
-##################################################################
-# annomi response_generation speech [training] speech_241031_lr1e4_frozen_eos_padding_bug_fixed
-python run_experiment.py --mode train --modality speech --run_name speech_241108_lr1e4_frozen_eos_padding_bug_fixed \
-    --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
-    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
-    --task response_generation
-
-# annomi response_generation text [hasnt started]
-python run_experiment.py --mode train --modality text --run_name text_241108_lr1e4_frozen_eos_padding_bug_fixed \
-    --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
-    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
-    --task response_generation
 
 ##################################################################
 # annomi classification speech [trained] speech_241031_lr1e4_frozen_eos_padding_bug_fixed
-python run_experiment.py --mode train --modality speech --run_name speech_241101_lr1e4_frozen_eos_padding_bug_fixed \
+python run_experiment.py --mode train --modality speech --run_name speech_241108_only_hq \
     --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
-    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos
+    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
+    --only_hq_sessions
 
 # annomi classification text [training]
-python run_experiment.py --mode train --modality text --run_name text_241101_lr1e4_frozen_eos_padding_bug_fixed \
+python run_experiment.py --mode train --modality text --run_name text_241108_only_hq \
     --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
-    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos
+    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
+    --only_hq_sessions
 
 ##################################################################
 # annomi forecasting speech [training]
 python run_experiment.py --mode train --modality speech --run_name speech_241101_lr1e4_frozen_eos_padding_bug_fixed \
     --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
     --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
-    --task forecasting
+    --task forecasting --only_hq_sessions
 
 # annomi forecasting text [training]
 python run_experiment.py --mode train --modality text --run_name text_241101_lr1e4_frozen_eos_padding_bug_fixed \
     --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
     --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
-    --task forecasting
+    --task forecasting --only_hq_sessions
+
+##################################################################
+# annomi response_generation speech [training] speech_241031_lr1e4_frozen_eos_padding_bug_fixed
+python run_experiment.py --mode train --modality speech --run_name speech_241108_lr1e4_frozen_eos_padding_bug_fixed \
+    --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
+    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
+    --task response_generation --only_hq_sessions
+
+# annomi response_generation text [hasnt started]
+python run_experiment.py --mode train --modality text --run_name text_241108_lr1e4_frozen_eos_padding_bug_fixed \
+    --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
+    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
+    --task response_generation --only_hq_sessions
 
 
+##################################################################
+##################################################################
+##################################################################
 ######################
 python run_experiment.py --mode train --modality speech --run_name speech_241030_lr5e5_encoderonly \
     --batch_size 1  --test_batch_size 1  --datatype float16 --steps 50000 --data_length -1 -1 -1 \

@@ -52,7 +52,7 @@ def custom_datacollate(batch, task="classification"):
 
     return {"inputs": inputs, "labels": labels, "audio_infos": audio_cue_infos}
 
-def process(args, split=[0.8,0.05,0.15], print_examples=False):
+def process(args, split=[0.5,0.05,0.45], print_examples=False):
     # args = { }
     if args.dataset == "annomi":
         # segfile = "data/segmental_information.json"
@@ -65,6 +65,9 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
     sessions = {}
     for seg_id, seg_info in seg.items():
         tid = seg_info["transcript_id"]
+        if args.only_hq_sessions:
+            if seg_info["mi_quality"] == "low":
+                continue
         if tid in sessions:
             sessions[tid] += [seg_info]
         else:

@@ -425,6 +425,7 @@ class MyTrainer:
         logging.info(f"Freeze Encoder: {self.args.freeze_encoder}")
         logging.info(f"Use Audio EOS: {self.args.use_audio_eos}")
         logging.info(f"Noise Level (SNR): {self.args.noise_level}")
+        logging.info(f"Use Audio EOS: {self.args.use_audio_eos}")
 
 
         if 'train' in self.args.mode:
@@ -622,13 +623,20 @@ class MyTrainer:
             bertscore = evaluate.load("bertscore")
 
             results = []
-            for prompt, generated, label, interlocutor in generated_texts:
+            # for prompt, generated, label, interlocutor in generated_texts:
+            # use tqdm
+            for prompt, generated, label, interlocutor in tqdm(generated_texts):
                 g = generated#.split("\n")[0]
                 c = label#.split("\n")[0]
 
+                # print("1")
                 bleu_score = bleu.compute(predictions=[g], references=[[c]])["bleu"] if g != "" else 0 
-                rouge_score = rouge.compute(predictions=[g], references=[c])["rougeL"] 
+                # print("2")
+                tokenize = lambda x: x.split() # this is to suppress warning (stup)
+                rouge_score = rouge.compute(predictions=[g], references=[c], tokenizer=tokenize)["rougeL"] 
+                # print("3")
                 meteor_score = meteor.compute(predictions=[g], references=[c])["meteor"] 
+                # print("4")
                 bertscore_score = bertscore.compute(predictions=[g], references=[c], lang="en")["f1"]
                 res_dic = {
                     "prompt": prompt,
@@ -783,6 +791,8 @@ def parse_arguments():
     parser.add_argument('--freeze_encoder', action='store_true', default=False, help='Freeze the encoder')
     parser.add_argument('--use_audio_eos', action='store_true', default=False, help='Use audio eos')
     parser.add_argument('--noise_level', type=float, default=-1, help='Noise level in Signal-to-Noise (SNR) Ratio for audio augmentation')
+    parser.add_argument('--only_hq_sessions', action='store_true', default=False, help='Use only high quality sessions')
+    
     args = parser.parse_args()
     return args
 
