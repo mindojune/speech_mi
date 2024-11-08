@@ -29,6 +29,9 @@ from peft import PeftConfig, PeftModel
 from peft import get_peft_model, LoraConfig, TaskType
 from sklearn.metrics import f1_score, classification_report
 
+# import ROUGE, BLEU, BERTScore, METEOR
+import evaluate
+
 class MyTrainer:
     def __init__(self, args):
         self.args = args
@@ -613,8 +616,63 @@ class MyTrainer:
         # compute accuracy and log
 
         if self.args.task == "response_generation":
-            raise NotImplementedError("Response generation task not implemented yet.")
-            return
+            bleu = evaluate.load("bleu")
+            rouge = evaluate.load("rouge")
+            meteor = evaluate.load("meteor")
+            bertscore = evaluate.load("bertscore")
+
+            results = []
+            for prompt, generated, label, interlocutor in generated_texts:
+                g = generated.split("\n")[0]
+                c = label.split("\n")[0]
+
+                bleu_score = bleu.compute(predictions=[g], references=[[c]])["bleu"] if g != "" else 0 
+                rouge_score = rouge.compute(predictions=[g], references=[c])["rougeL"] 
+                meteor_score = meteor.compute(predictions=[g], references=[c])["meteor"] 
+                bertscore_score = bertscore.compute(predictions=[g], references=[c], lang="en")["f1"]
+                res_dic = {
+                    "prompt": prompt,
+                    "generated": g,
+                    "label": c,
+                    "interlocutor": interlocutor,
+                    "bleu": bleu_score,
+                    "rouge": rouge_score,
+                    "meteor": meteor_score,
+                    "bertscore": bertscore_score
+                }
+
+            # compute average scores
+            avg_bleu = np.mean([res["bleu"] for res in results])
+            avg_rouge = np.mean([res["rouge"] for res in results])
+            avg_meteor = np.mean([res["meteor"] for res in results])
+            avg_bertscore = np.mean([res["bertscore"] for res in results])
+
+            logging.info(f"Average BLEU Score: {avg_bleu}")
+            logging.info(f"Average ROUGE Score: {avg_rouge}")
+            logging.info(f"Average METEOR Score: {avg_meteor}")
+            logging.info(f"Average BERTScore: {avg_bertscore}")
+
+            log_dir = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name, "test_results.json")
+            # added formatted generated_texts
+            formatted_generated_texts = []
+            for prompt, generated, label, interlocutor in generated_texts:
+                formatted_generated_texts.append({
+                    "prompt": prompt,
+                    "generated": generated,
+                    "label": label,
+                    "interlocutor": interlocutor
+                })
+            dic ={
+                    "bleu": avg_bleu,
+                    "rouge": avg_rouge,
+                    "meteor": avg_meteor,
+                    "bertscore": avg_bertscore
+                }
+            dic["generated_texts"] = formatted_generated_texts
+            with open(log_dir, 'w') as f:
+                json.dump(dic, f, indent=4)
+
+
         else:
             correct = 0.0
             total = 0.0

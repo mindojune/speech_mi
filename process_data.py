@@ -96,6 +96,10 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
     dev_sessions = session_keys[train_end:dev_end]
     test_sessions = session_keys[dev_end:]
 
+    print("Train Sessions:", len(train_sessions))
+    print("Dev Sessions:", len(dev_sessions))
+    print("Test Sessions:", len(test_sessions))
+
     def create_context_target_pairs(session):
         pairs = []
         for i in range(1, len(session)):
@@ -145,6 +149,9 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
         dev_data = dev_data[:dev_len]
         test_data = test_data[:test_len]
 
+    print("Train Data:", len(train_data))
+    print("Dev Data:", len(dev_data))
+    print("Test Data:", len(test_data))
     custom_datacollate_task = partial(custom_datacollate, task=args.task)
 
     trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=custom_datacollate_task)
@@ -165,8 +172,9 @@ def process(args, split=[0.8,0.05,0.15], print_examples=False):
 
 if __name__ == "__main__":
     # make a namespace 
-    args = { "dataset": "annomi", "task": "classification", "mode": ["train"], "run_name": "run1", "seed": 42, "batch_size": 1 }
-    args = { "dataset": "annomi", "task": "forecasting", "mode": ["train"], "run_name": "run1", "seed": 42, "batch_size": 1 }
+    args = { "dataset": "annomi", "task": "response_generation", "mode": ["train"], \
+            "run_name": "run1", "seed": 42, "batch_size": 1, "test_batch_size": 1 }
+    # args = { "dataset": "annomi", "task": "forecasting", "mode": ["train"], "run_name": "run1", "seed": 42, "batch_size": 1m }
     
     from types import SimpleNamespace   
     args = SimpleNamespace(**args)
