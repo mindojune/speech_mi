@@ -22,7 +22,8 @@ def get_audio_features(dic, max_audio_s=100):
     audio = audio[begin_time * 16000:end_time * 16000]
     if max_audio_s:
         audio = audio[:max_audio_s*16000]  
-
+    
+    # functionals
     smile = opensmile.Smile(
     feature_set=opensmile.FeatureSet.eGeMAPSv02,
     feature_level=opensmile.FeatureLevel.Functionals,
@@ -32,15 +33,17 @@ def get_audio_features(dic, max_audio_s=100):
         16000
     )
 
-    low_level_smile = opensmile.Smile(
-    feature_set=opensmile.FeatureSet.eGeMAPSv02,
-        feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
-    )
-    low_level_features = low_level_smile.process_signal(
-        signal,
-        16000
-    )
-    combined_features = {**features, **low_level_features}
+    # low level descriptors
+    # low_level_smile = opensmile.Smile(
+    #     feature_set=opensmile.FeatureSet.eGeMAPSv02,
+    #         feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
+    # )
+    # low_level_features = low_level_smile.process_signal(
+    #     signal,
+    #     16000
+    # )
+    combined_features = {**features}
+    # combined_features = {**low_level_features}
     return combined_features
 
 
@@ -48,9 +51,34 @@ dicname = "./data/converted_segmental_information.json"
 with open(dicname, "r") as f:
     dic = json.load(f)
 
+dic = {k: v for k, v in dic.items() if v["mi_quality"] == "high"}
+
+# first 4 of dic
+dic = {k: v for k, v in list(dic.items())[:4]}
+
+features = {}
 for key, entry in tqdm(dic.items()):
-    features = get_audio_features(entry)
-    print("*"*50)
-    print(entry)
-    print(features)
-    input()
+    mi_quality = entry["mi_quality"]
+
+    feat = get_audio_features(entry)
+    # print(type(feat))
+    # print(feat["equivalentSoundLevel_dBp"])
+    # print(type(feat["equivalentSoundLevel_dBp"]))
+    # input()
+    feats = {}
+    for k, v in feat.items():
+        # print(k)
+        # print(v.values[0])
+        # input()
+        feats[k] = v.values[0]
+    features[key] = feats
+
+
+# save to pkl
+import pickle
+with open("./data/audio_features_converted.pkl", "wb") as f:
+    pickle.dump(features, f)
+    # print("*"*50)
+    # print(entry)
+    # print(features)
+    # input()

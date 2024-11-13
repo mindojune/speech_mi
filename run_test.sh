@@ -3,8 +3,8 @@
 
 ##################################################################
 # annomi classification speech [trained] speech_241031_lr1e4_frozen_eos_padding_bug_fixed
-epoch=9
-step=34000 #40000 #50000
+epoch=100
+step=160000 #40000 #50000
 runname=speech_epoch_${epoch}_step_${step}_classification
 savename=speech_241108_only_hq #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
 checkname=checkpoint_epoch_${epoch}_step_${step}.pt
@@ -20,8 +20,8 @@ python run_experiment.py --mode test --modality speech \
 
 ##################################################################
 # annomi classification text [trained]
-epoch=11 #9
-step=38000 #34000 #40000 #50000
+epoch=100 #9
+step=160000 #34000 #40000 #50000
 runname=text_epoch_${epoch}_step_${step}_classification
 savename=text_241108_only_hq #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
 checkname=checkpoint_epoch_${epoch}_step_${step}.pt
@@ -37,8 +37,8 @@ python run_experiment.py --mode test --modality text \
 
 ##################################################################
 # annomi forecasting speech [training]
-epoch=5
-step=20000 #40000 #50000
+epoch=4
+step=8000 #40000 #50000
 runname=speech_epoch_${epoch}_step_${step}_forecasting
 savename=speech_241108_only_hq #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
 checkname=checkpoint_epoch_${epoch}_step_${step}.pt
@@ -55,8 +55,8 @@ python run_experiment.py --mode test --modality speech \
 ##################################################################
 # annomi forecasting text [training]
 #################################
-epoch=5
-step=18000 #40000 #50000
+epoch=4
+step=8000 #40000 #50000
 runname=text_epoch_${epoch}_step_${step}_forecasting
 savename=text_241108_only_hq #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
 checkname=checkpoint_epoch_${epoch}_step_${step}.pt

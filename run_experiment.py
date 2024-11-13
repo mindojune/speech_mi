@@ -426,7 +426,8 @@ class MyTrainer:
         logging.info(f"Use Audio EOS: {self.args.use_audio_eos}")
         logging.info(f"Noise Level (SNR): {self.args.noise_level}")
         logging.info(f"Use Audio EOS: {self.args.use_audio_eos}")
-
+        logging.info(f"Only use hq sessions: {self.args.only_hq_sessions}")
+        logging.info(f"Use handcrafted speech features: {self.args.use_handcrafted_speech_features}")
 
         if 'train' in self.args.mode:
             self.train()
@@ -792,7 +793,8 @@ def parse_arguments():
     parser.add_argument('--use_audio_eos', action='store_true', default=False, help='Use audio eos')
     parser.add_argument('--noise_level', type=float, default=-1, help='Noise level in Signal-to-Noise (SNR) Ratio for audio augmentation')
     parser.add_argument('--only_hq_sessions', action='store_true', default=False, help='Use only high quality sessions')
-    
+    parser.add_argument('--use_handcrafted_speech_features', action='store_true', default=False, help='Use handcrafted speech features')
+
     args = parser.parse_args()
     return args
 
