@@ -4,7 +4,7 @@ import random
 import torch
 from functools import partial
 
-def custom_datacollate(batch, task="classification"):
+def custom_datacollate(batch, task="classification", omit_last_text=False):
     """
     Collate function to process audio and other necessary data.
     TODO: audio processing and feeding ...
@@ -19,7 +19,10 @@ def custom_datacollate(batch, task="classification"):
 
     for c, t in zip(context, target):
         # Interleave utterance_text from context
-        interleaved_text = "\n".join([f"{utterance['interlocutor']}: {utterance['utterance_text']}" for utterance in c])
+        if omit_last_text:
+            interleaved_text = "\n".join([f"{utterance['interlocutor']}: {utterance['utterance_text']}" for utterance in c[:-1]])
+        else:
+            interleaved_text = "\n".join([f"{utterance['interlocutor']}: {utterance['utterance_text']}" for utterance in c])
 
         # add a special token to separate the context from the target
         interleaved_text += f"\n[SEP]\n"  # change introduced on 241024 
@@ -110,17 +113,12 @@ def process(args, split=[0.5,0.05,0.45], print_examples=False):
             if args.task == "classification":
                 context = session[:i+1]
                 target = session[i]
-                # pairs.append({"context": context, "target": target})
             elif args.task == "forecasting":
                 context = session[:i]
                 target = session[i]
             elif args.task == "response_generation":
-                # raise NotImplementedError
                 context = session[:i]
-                target = session[i]
-                # pairs.append({"context": context, "target": target})
-            if args.omit_last_text:
-                context = context[:-1]
+
             # if begin == end for last item of context, skip or also skip when either of them is None
             if context[-1]["begin"] == context[-1]["end"] or context[-1]["begin"] is None or context[-1]["end"] is None:
                 continue
@@ -157,7 +155,7 @@ def process(args, split=[0.5,0.05,0.45], print_examples=False):
     print("Train Data:", len(train_data))
     print("Dev Data:", len(dev_data))
     print("Test Data:", len(test_data))
-    custom_datacollate_task = partial(custom_datacollate, task=args.task)
+    custom_datacollate_task = partial(custom_datacollate, task=args.task, omit_last_text=args.omit_last_text)
 
     trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=custom_datacollate_task)
     devloader = torch.utils.data.DataLoader(dev_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate_task)
