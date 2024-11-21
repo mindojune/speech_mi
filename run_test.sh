@@ -72,8 +72,8 @@ python run_experiment.py --mode test --modality text \
 
 ##################################################################
 # annomi response_generation speech [training]
-epoch=16
-step=56000 #40000 #50000
+epoch=61
+step=100000 #40000 #50000
 runname=speech_epoch_${epoch}_step_${step}_response_generation
 savename=speech_241108_only_hq #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
 checkname=checkpoint_epoch_${epoch}_step_${step}.pt
@@ -90,8 +90,8 @@ python run_experiment.py --mode test --modality speech \
 
 ##################################################################
 # annomi response_generation text [training]    
-epoch=11
-step=40000 #40000 #50000
+epoch=61
+step=100000 #40000 #50000
 runname=text_epoch_${epoch}_step_${step}_response_generation
 savename=text_241108_only_hq #cont_speech_epoch_5_step_38000 #speech_241030_lr5e5_encoderonly #speech_test_241029_leftpadded # speech_241030_lr1e4_frozen
 checkname=checkpoint_epoch_${epoch}_step_${step}.pt

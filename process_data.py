@@ -119,6 +119,8 @@ def process(args, split=[0.5,0.05,0.45], print_examples=False):
                 context = session[:i]
                 target = session[i]
                 # pairs.append({"context": context, "target": target})
+            if args.omit_last_text:
+                context = context[:-1]
             # if begin == end for last item of context, skip or also skip when either of them is None
             if context[-1]["begin"] == context[-1]["end"] or context[-1]["begin"] is None or context[-1]["end"] is None:
                 continue

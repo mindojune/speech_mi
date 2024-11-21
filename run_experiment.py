@@ -428,6 +428,8 @@ class MyTrainer:
         logging.info(f"Use Audio EOS: {self.args.use_audio_eos}")
         logging.info(f"Only use hq sessions: {self.args.only_hq_sessions}")
         logging.info(f"Use handcrafted speech features: {self.args.use_handcrafted_speech_features}")
+        logging.info(f"Omit last text: {self.args.omit_last_text}")
+
 
         if 'train' in self.args.mode:
             self.train()
@@ -662,6 +664,30 @@ class MyTrainer:
             logging.info(f"Average METEOR Score: {avg_meteor}")
             logging.info(f"Average BERTScore: {avg_bertscore}")
 
+            # Compute client-wise and therapist-wise metrics
+            client_results = [res for res in results if res["interlocutor"] == "client"]
+            therapist_results = [res for res in results if res["interlocutor"] == "therapist"]
+
+            avg_bleu_client = np.mean([res["bleu"] for res in client_results])
+            avg_rouge_client = np.mean([res["rouge"] for res in client_results])
+            avg_meteor_client = np.mean([res["meteor"] for res in client_results])
+            avg_bertscore_client = np.mean([res["bertscore"] for res in client_results])
+
+            avg_bleu_therapist = np.mean([res["bleu"] for res in therapist_results])
+            avg_rouge_therapist = np.mean([res["rouge"] for res in therapist_results])
+            avg_meteor_therapist = np.mean([res["meteor"] for res in therapist_results])
+            avg_bertscore_therapist = np.mean([res["bertscore"] for res in therapist_results])
+
+            logging.info(f"Client-wise Average BLEU Score: {avg_bleu_client}")
+            logging.info(f"Client-wise Average ROUGE Score: {avg_rouge_client}")
+            logging.info(f"Client-wise Average METEOR Score: {avg_meteor_client}")
+            logging.info(f"Client-wise Average BERTScore: {avg_bertscore_client}")
+
+            logging.info(f"Therapist-wise Average BLEU Score: {avg_bleu_therapist}")
+            logging.info(f"Therapist-wise Average ROUGE Score: {avg_rouge_therapist}")
+            logging.info(f"Therapist-wise Average METEOR Score: {avg_meteor_therapist}")
+            logging.info(f"Therapist-wise Average BERTScore: {avg_bertscore_therapist}")
+
             log_dir = os.path.join(self.args.save_dir, f"{self.args.task}_experiment", self.args.run_name, "test_results.json")
             # added formatted generated_texts
             formatted_generated_texts = []
@@ -676,7 +702,15 @@ class MyTrainer:
                     "bleu": avg_bleu,
                     "rouge": avg_rouge,
                     "meteor": avg_meteor,
-                    "bertscore": avg_bertscore
+                    "bertscore": avg_bertscore,
+                    "client_bleu": avg_bleu_client,
+                    "client_rouge": avg_rouge_client,
+                    "client_meteor": avg_meteor_client,
+                    "client_bertscore": avg_bertscore_client,
+                    "therapist_bleu": avg_bleu_therapist,
+                    "therapist_rouge": avg_rouge_therapist,
+                    "therapist_meteor": avg_meteor_therapist,
+                    "therapist_bertscore": avg_bertscore_therapist
                 }
             dic["generated_texts"] = formatted_generated_texts
             with open(log_dir, 'w') as f:
@@ -794,6 +828,7 @@ def parse_arguments():
     parser.add_argument('--noise_level', type=float, default=-1, help='Noise level in Signal-to-Noise (SNR) Ratio for audio augmentation')
     parser.add_argument('--only_hq_sessions', action='store_true', default=False, help='Use only high quality sessions')
     parser.add_argument('--use_handcrafted_speech_features', action='store_true', default=False, help='Use handcrafted speech features')
+    parser.add_argument('--omit_last_text', action='store_true', default=False, help='Omit last text token')
 
     args = parser.parse_args()
     return args
