@@ -118,7 +118,7 @@ def process(args, split=[0.5,0.05,0.45], print_examples=False):
                 target = session[i]
             elif args.task == "response_generation":
                 context = session[:i]
-
+                target = session[i]
             # if begin == end for last item of context, skip or also skip when either of them is None
             if context[-1]["begin"] == context[-1]["end"] or context[-1]["begin"] is None or context[-1]["end"] is None:
                 continue
