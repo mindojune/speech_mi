@@ -806,7 +806,8 @@ def parse_arguments():
     parser.add_argument('--log_interval', type=int, default=1, help='Interval for logging')
     parser.add_argument('--model', type=str, default='GeneZC/MiniChat-2-3B', help='Model architecture to use')
     parser.add_argument('--dataset', type=str, default='annomi', help='Dataset to use for training')
-    parser.add_argument('--task', type=str, default='classification', help='Task type (e.g., classification, forecasting, response_generation)')
+    parser.add_argument('--task', type=str, default='classification', help='Task type \
+                        (e.g., classification, forecasting, response_generation, joint)')
     parser.add_argument('--mode', type=str, nargs='+', choices=['train', 'test'], default=['train'], help='Mode to run the experiment (train and/or test)')
     parser.add_argument('--run_name', type=str, required=True, help='Name of the run for logging')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
