@@ -17,7 +17,7 @@ python run_experiment.py --mode train --modality text --run_name text_241108_onl
     --only_hq_sessions
 
 # annomi classification textAA []
-python run_experiment.py --mode train --modality textAA --run_name text_241108_only_hq \
+python run_experiment.py --mode train --modality textAA --run_name textAA_241108_only_hq \
     --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
     --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
     --only_hq_sessions
@@ -36,11 +36,11 @@ python run_experiment.py --mode train --modality text --run_name text_241108_onl
     --task forecasting --only_hq_sessions
 
 # annomi forecasting textAA []
-python run_experiment.py --mode train --modality textAA --run_name text_241108_only_hq \
+python run_experiment.py --mode train --modality textAA --run_name textAA_241108_only_hq \
     --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
     --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
     --task forecasting --only_hq_sessions
-    
+
 ##################################################################
 # annomi response_generation speech [training] 
 python run_experiment.py --mode train --modality speech --run_name speech_241121_only_hq_omit_last \

@@ -24,20 +24,11 @@ def annotate_audio(meta_info):
         {'role': 'system', 'content': 'You are a helpful assistant.'}, 
         {"role": "user", "content": [
             {"type": "audio", "audio_url": audio_path},
-            {"type": "text", "text": 
-'''
-Analyze the provided audio and identify the most prominent tone or emotion in the speaker's utterance.
-
-Classify the tone/emotion as **exactly one** of the following categories:  
-- **empathetic** (understanding, compassionate, emotionally attuned)  
-- **neutral** (objective, factual, without emotional inflection)  
-- **assertive** (confident, direct, guiding)  
-- **hesitant** (uncertain, cautious, tentative)  
-
-**Output:**  
-The tone/emotion is: [One of: empathetic  | neutral | assertive | hesitant].
-'''
-             },
+            {"type": "text", "text": f"Analyze the paralinguistic features in this counseling speech, \
+focusing on tone, pitch, and intonation \
+that is relevant to the speaker's role ({speaker}) and \
+their conversational intent (e.g., reflection, question, change talk). \
+Make the analysis brief, containing at maximum 2-3 sentences."},
         ]},
     ]
     text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
@@ -64,7 +55,7 @@ The tone/emotion is: [One of: empathetic  | neutral | assertive | hesitant].
                     # audio = audio.to(device)
                     audios.append(audio)
     # print(text, audios)
-    inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True) #, max_length=600)
+    inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
     # print(inputs)
     # print(inputs.keys())
     # print("Device: ", device)
@@ -74,7 +65,7 @@ The tone/emotion is: [One of: empathetic  | neutral | assertive | hesitant].
     # inputs.feature_attention_mask = inputs.feature_attention_mask.to(device)
     inputs = inputs.to(device)
 
-    generate_ids = model.generate(**inputs, max_new_tokens=256)#max_length=256)
+    generate_ids = model.generate(**inputs, max_length=256)
     generate_ids = generate_ids[:, inputs.input_ids.size(1):]
 
     response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
@@ -106,35 +97,19 @@ def main():
             analysis = "EMPTY"
         else:
             analysis = annotate_audio(seg_info)
-            analysis = analysis.lower()
-            analysis = analysis.strip()
-            # print(analysis)
-            # extract the pitch pattern
-            if "empathetic" in analysis:
-                analysis = "empathetic"
-            elif "neutral" in analysis:
-                analysis = "neutral"
-            elif "assertive" in analysis:
-                analysis = "assertive"
-            elif "hesitant" in analysis:
-                analysis = "hesitant"
-            else:
-                analysis = "ERROR"
-            # print(analysis)
-            # analysis = json.loads(analysis)
             print("="*30)
             print("Text: ", text)
             print("Speaker: ", speaker)
             print("Analysis: ", analysis)
 
-        seg_info["speech_analysis"] = analysis
+        seg_info["audio_analysis"] = analysis
         if count > float("inf"):
             break
         count += 1
 
 
 
-    with open("data/converted_segmental_information_with_speech_analysis.json", "w") as fh:
+    with open("data/converted_segmental_information_with_audio_analysis.json", "w") as fh:
         json.dump(seg, fh, indent=4)
 
 if __name__ == "__main__":
