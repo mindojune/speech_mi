@@ -4,7 +4,7 @@ import random
 import torch
 from functools import partial
 
-def custom_datacollate(batch, task="classification", omit_last_text=False):
+def custom_datacollate(batch, task="classification", omit_last_text=False, append_audio_analysis=False):
     """
     Collate function to process audio and other necessary data.
     TODO: audio processing and feeding ...
@@ -24,12 +24,14 @@ def custom_datacollate(batch, task="classification", omit_last_text=False):
         else:
             interleaved_text = "\n".join([f"{utterance['interlocutor']}: {utterance['utterance_text']}" for utterance in c])
 
+        if append_audio_analysis:
+            interleaved_text += f"\n{c[-1]['audio_analysis']}"  # add the audio analysis to the context
         # add a special token to separate the context from the target
         interleaved_text += f"\n[SEP]\n"  # change introduced on 241024 
         
         if task == "response_generation":
             interleaved_text += t["interlocutor"] + ": "
-            label = t["utterance_text"]
+            label = t["utterance_text"]      
         else:
             # Determine the label based on the interlocutor
             if t["interlocutor"] == "therapist":
@@ -55,11 +57,14 @@ def custom_datacollate(batch, task="classification", omit_last_text=False):
 
     return {"inputs": inputs, "labels": labels, "audio_infos": audio_cue_infos}
 
-def process(args, split=[0.5,0.05,0.45], print_examples=False):
+def process(args, split=[0.5,0.05,0.45], print_examples=True):
     # args = { }
     if args.dataset == "annomi":
         # segfile = "data/segmental_information.json"
-        segfile = "data/converted_segmental_information.json"
+        # segfile = "data/converted_segmental_information.json"
+        segfile = "data/converted_segmental_information_with_audio_analysis.json"
+    elif args.modality == "textAA":
+        segfile = "data/converted_segmental_information_with_audio_analysis.json"
 
     with open(segfile, "r") as fh:
         seg = json.load(fh)
@@ -155,7 +160,12 @@ def process(args, split=[0.5,0.05,0.45], print_examples=False):
     print("Train Data:", len(train_data))
     print("Dev Data:", len(dev_data))
     print("Test Data:", len(test_data))
-    custom_datacollate_task = partial(custom_datacollate, task=args.task, omit_last_text=args.omit_last_text)
+    if args.modality =="textAA":
+        append_audio_analysis = True
+    else:
+        append_audio_analysis = False
+    custom_datacollate_task = partial(custom_datacollate, task=args.task, omit_last_text=args.omit_last_text, \
+                                      append_audio_analysis=append_audio_analysis)
 
     trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=custom_datacollate_task)
     devloader = torch.utils.data.DataLoader(dev_data, batch_size=args.test_batch_size, shuffle=False, collate_fn=custom_datacollate_task)

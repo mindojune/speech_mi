@@ -282,7 +282,7 @@ class MyTrainer:
             embedded_text = self.model.model.model.embed_tokens(batch["input_ids"])
         else:
             embedded_text= self.model.model.embed_tokens(batch["input_ids"])
-        if self.args.modality == "text":
+        if self.args.modality == "text" or self.args.modality == "textAA":
             if train:
                 # concatenate the response to the context
                 response_input_ids = batch["labels"]
@@ -814,7 +814,7 @@ def parse_arguments():
     parser.add_argument('--config', type=str, default='config/config_full.yaml', help='Path to the configuration file')
     parser.add_argument('--grad_accum_interval', type=int, default=16, help='Gradient accumulation interval')
     parser.add_argument('--checkpoint_path', type=str, help='Path to the checkpoint to resume training')
-    parser.add_argument('--modality', type=str, choices=['speech', 'text'], required=True, help='Data mode to use (speech or text)')
+    parser.add_argument('--modality', type=str, choices=['speech', 'text', 'textAA'], required=True, help='Data mode to use (speech or text)')
     parser.add_argument('--max_audio_s', default=100, type=int, help='Maximum number of seconds to use for audio')
     parser.add_argument('--datatype', type=str, default='float16', help='Data type to use for training')
     parser.add_argument('--use_lora', action="store_true", help='Use LoRA for model adaptation')
