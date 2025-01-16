@@ -25,7 +25,7 @@ def custom_datacollate(batch, task="classification", omit_last_text=False, appen
             interleaved_text = "\n".join([f"{utterance['interlocutor']}: {utterance['utterance_text']}" for utterance in c])
 
         if append_audio_analysis:
-            interleaved_text += f"\n{c[-1]['audio_analysis']}"  # add the audio analysis to the context
+            interleaved_text += f"\n[Audio Analysis] {c[-1]['audio_analysis']}"  # add the audio analysis to the context
         # add a special token to separate the context from the target
         interleaved_text += f"\n[SEP]\n"  # change introduced on 241024 
         
