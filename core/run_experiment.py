@@ -17,11 +17,11 @@ import torchaudio
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 
-from process_data import process 
-from log_writer import LogWriter 
-from audio_encoder import AudioEncoder
-from audio_llama import AudioLlamaForCausalLM
-from utils import set_all_seeds, create_attention_mask, compute_num_audio_embeds, add_noise
+from core.process_data import process 
+from core.log_writer import LogWriter 
+from core.audio_encoder import AudioEncoder
+from core.audio_llama import AudioLlamaForCausalLM
+from core.utils import set_all_seeds, create_attention_mask, compute_num_audio_embeds, add_noise
 import librosa
 from peft import PeftConfig, PeftModel
 

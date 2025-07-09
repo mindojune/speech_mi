@@ -1,100 +1,229 @@
-# Speech MI 2024 Fall Project
+# Speech-Integrated Modeling for Behavioral Coding in Counseling
+
+This repository contains the code and resources for the paper:
+
+**"Speech-Integrated Modeling for Behavioral Coding in Counseling"**  
+*Do June Min, Verónica Pérez-Rosas, Kenneth Resnicow, Rada Mihalcea*  
+*Proceedings of the 26th Annual Meeting of the Special Interest Group on Discourse and Dialogue (SIGDIAL 2025)*
+
+## Abstract
+
+Computational models of psychotherapy often ignore vocal cues by relying solely on text. To address this, we propose MISQ, a framework that integrates speech features directly into language models using a speech encoder and lightweight adapter. MISQ improves behavioral analysis in counseling conversations, achieving ~5% relative gains over text-only or indirect speech methods—underscoring the value of vocal signals like tone and prosody.
+
+## System Overview
+
+Our system combines:
+- **Speech Processing**: HuBERT-based audio encoder for extracting speech representations
+- **Language Modeling**: MiniChat-2-3B as the base language model with LoRA fine-tuning
+- **Multimodal Integration**: Direct integration of audio embeddings with text embeddings
+- **Behavioral Analysis**: Focus on motivational interviewing (MI) behavioral codes
+
+## Key Features
+
+- **Multimodality**: Speech and text inputs
+- **Two Tasks**: Classification and forecasting.
+- **Noise Robustness**: Evaluation under various noise conditions
+- **Efficient Training**: LoRA fine-tuning for parameter efficiency
+
+## Repository Structure
+
+```
+speech_mi/
+├── README.md                           # This file
+├── requirements.txt                    # Python dependencies
+├── config/
+│   └── config_full.yaml              # Model configuration
+├── data/
+│   ├── converted_segmental_information_with_audio_analysis.json
+│   └── segmental_information.json    # Dataset information
+├── scripts/
+│   ├── run_train.sh                   # Training scripts
+│   ├── run_test.sh                    # Testing scripts
+│   ├── run_noise.sh                   # Noise robustness testing
+│   └── continue_train.sh              # Continue training from checkpoint
+├── core/
+│   ├── run_experiment.py              # Main experiment runner
+│   ├── audio_llama.py                 # Audio-integrated LLM
+│   ├── audio_encoder.py               # Audio processing module
+│   ├── process_data.py                # Data preprocessing
+│   └── utils.py                       # Utility functions
+├── analysis/
+│   ├── plot_confusion.py              # Confusion matrix visualization
+│   ├── plot_noise.py                  # Noise robustness analysis
+│   └── plot.py                        # General plotting utilities
+└── tools/
+    ├── qa2_test.py                    # Audio analysis with Qwen2-Audio
+    ├── z_diarize.py                   # Speaker diarization
+    └── z_transcribe.py                # Audio transcription
+```
+
+## Installation
+
+1. **Clone the repository**:
+```bash
+git clone https://github.com/your-username/speech-mi.git
+cd speech-mi
+```
+
+2. **Create a conda environment**:
+```bash
+conda create --name speech_mi python=3.11
+conda activate speech_mi
+```
+
+3. **Install dependencies**:
+```bash
+pip install -r requirements.txt
+```
+
+4. **Download pre-trained models**:
+The system uses the following pre-trained models:
+- MiniChat-2-3B (automatically downloaded via transformers)
+- HuBERT-large (automatically downloaded via transformers)
+- Audio Encoder Weights (Kang et al, 2024)
+
+Download the pretrained audio encoder weights from the following source:
+
+- GitHub Repository: [`wonjune-kang/llm-speech-summarization`](https://github.com/wonjune-kang/llm-speech-summarization)  
+- Direct Download: [Google Drive Folder](https://drive.google.com/drive/folders/1o363nAqpyP80tivFNdjmyyoWGCLUeHZS?usp=sharing)
+
+Once downloaded, place the file at the following path in your project directory:
 
 
-## Note: I've been training testing with = low quality sessions included....
-so this may need to change
+## Quick Start
 
-## Larnell TODOs
+### 1. Data Preparation
 
+Ensure your data is in the correct format. The system expects:
+- `data/converted_segmental_information_with_audio_analysis.json`: Main dataset with audio paths and annotations
+- Audio files accessible at the paths specified in the JSON
 
-### Possible Dataset: ``MELD: A Multimodal Multi-Party Dataset for Emotion Recognition in Conversation``
- 
-- [MELD](https://github.com/declare-lab/MELD)
+### 2. Training
 
-Try if we can use this dataset for the project.
+Use the provided training scripts:
 
-### Before
-Please understand that there are hardcoded paths in the code. You will need to change them to your own paths.
-Also __never remove or move any files or scripts in my paths__, which
-are 
-- `/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/`
-- `/nfs/turbo/coe-mihalcea/dojmin/speech_mi`
+```bash
+# Train all modalities for classification
+./run_train.sh
 
-### Steps
+# Or train specific modality
+python run_experiment.py --mode train --modality speech \
+    --run_name "my_speech_experiment" \
+    --batch_size 2 --test_batch_size 4 --datatype float16 \
+    --steps 200000 --data_length -1 -1 -1 \
+    --validation_interval 2000 --learning_rate 1e-4 \
+    --freeze_encoder --use_lora --use_audio_eos --only_hq_sessions
+```
 
-0. Go over the scripts briefly and get a high-level understanding of what's going on. 
-`run_experiment.py` is the main script that runs the experiments so it should be your entry point.
-__Your goal__ is to be able to __describe what each script and each function does at a high level__.
+### 3. Testing
 
-1. Get a GPU allocation (inside a screen or tmux session) with something like
+Evaluate trained models:
 
+```bash
+# Test all trained models
+./run_test.sh
 
-`srun --account mihalcea_owned1 --partition spgpu2 --cpus-per-task 16 --mem 120GB --gpus 1 \--time 24:00:00 --pty bash`
+# Or test specific model
+python run_experiment.py --mode test --modality speech \
+    --run_name "test_my_speech_experiment" \
+    --test_batch_size 2 --datatype float16 \
+    --checkpoint_path "./logs/classification_experiment/my_speech_experiment/checkpoint_epoch_X_step_Y.pt" \
+    --lora_checkpoint_path "./logs/classification_experiment/my_speech_experiment/lora_checkpoint_epoch_X_step_Y" \
+    --use_lora --use_audio_eos --only_hq_sessions
+```
 
-2. Create a dedicated and separate conda environment. Install the required packages.
+### 4. Noise Robustness Testing
 
-`conda create --name speech_mi python=3.11`
+Test model robustness to audio noise:
 
-`conda activate speech_mi`
+```bash
+./run_noise.sh
+```
 
-`pip install -r requirements.txt`
+## Experiment Scripts
 
+### Training Scripts (`run_train.sh`)
+- **Classification**: Predicts therapist behaviors and client talk types
+- **Forecasting**: Predicts future client responses
 
-3. Accessing tensorboard
-`ssh -L localhost:16060:localhost:6060 gl`
+### Testing Scripts (`run_test.sh`)
+- Evaluates trained models on test sets
+- Computes metrics: accuracy, F1-score, BLEU, ROUGE, METEOR, BERTScore
+- Generates detailed classification reports
 
-Then inside a separate tmux / screen session
+### Noise Robustness (`run_noise.sh`)
+- Tests performance under different SNR levels (25, 20, 15, 10, 5, 0 dB)
+- Evaluates degradation with noise
 
-`tensorboard --logdir=${log_path} --port=6060`
+### Continue Training (`continue_train.sh`)
+- Resume training from checkpoints
+- Useful for extending training or hyperparameter tuning
 
-Try with `/scratch/mihalcea_owned_root/mihalcea_owned1/dojmin/speech_mi_logs/classification_experiment/`. This contains MY logs for the classification experiment.
+## Configuration
 
+### Key Parameters
 
-4. Try running the training commands below. Make sure that you are providing the correct arguments. Pay mind to the hardcoded paths. For the audios, you can just used the provided paths. 
-After you train the model you can run inference with your own checkpoints.
+- `--modality`: Choose from `speech`, `text`, or `textAA`
+- `--task`: Choose from `classification` or `forecasting`
+- `--batch_size`: Training batch size (recommended: 2)
+- `--learning_rate`: Learning rate (recommended: 1e-4)
+- `--freeze_encoder`: Keep audio encoder frozen during training
+- `--use_lora`: Enable LoRA fine-tuning
+- `--use_audio_eos`: Add end-of-sequence tokens for audio
+- `--only_hq_sessions`: Train only on high-quality MI sessions
+- `--noise_level`: SNR level for noise robustness testing
 
-## Instructions
+### Modalities
 
-### Install Required Packages
-`pip install -r requirements.txt`
+1. **Speech**: Direct audio processing with HuBERT encoder
+2. **Text**: Text-only baseline (traditional approach)
+3. **TextAA (Paralinguistic Captioning)**: Text + audio analysis descriptions
 
-If you have a problem installing, install the packages without the specific versions (remove the `==` and the version number) and try again.
+## Results and Analysis
 
+### Visualization Tools
 
+- `plot_confusion.py`: Generate confusion matrices
+- `plot_noise.py`: Analyze noise robustness results
+- `plot.py`: General visualization utilities
 
-### To train forecasting model on AnnoMI Dataset 
-`python run_experiment.py --mode train --modality speech --run_name speech_241101_lr1e4_frozen_eos_padding_bug_fixed \
-    --batch_size 2  --test_batch_size 4  --datatype float16 --steps 200000 --data_length -1 -1 -1 \
-    --validation_interval 2000  --learning_rate 1e-4 --grad_accum_interval 64 --freeze_encoder --use_lora --use_audio_eos \
-    --task forecasting --dataset annomi`
+### Output Files
 
-### To test forecasting model on AnnoMI Dataset 
-`speech_checkpoint_path=your_saved_model_path`
+Training and testing generate:
+- `test_results.json`: Detailed results and metrics
+- `experiment.log`: Training logs
+- TensorBoard logs in experiment directories
 
-`speech_lora_checkpoint_path=your_saved_lora_path`
+## Dataset
 
-`runname=your_run_name`
+The system is designed for the AnnoMI dataset but can be adapted for other counseling datasets. Required format:
+- Audio files with timestamps
+- Transcript with speaker annotations
+- Behavioral codes (therapist behaviors, client talk types)
+- Session quality ratings
 
-`python run_experiment.py --mode test --modality speech \
-    --run_name test_${runname} --test_batch_size 2 \
-    --datatype float16 --steps 50000 --data_length -1 -1 -1 --validation_interval 2000 \
-    --checkpoint_path $speech_checkpoint_path \
-    --lora_checkpoint_path $speech_lora_checkpoint_path --use_lora  --use_audio_eos \
-    --task forecasting --dataset annomi`
+## Citation
 
-#################
-## For Myself
-## TODOs
-So for classification on annomi, speech helps. 
-The next step is to do:
-1. exploratory analysis
-    - on how speech helps
-    - finegrained analysis
-        - for example confusion matrix on the categories
-        
-2. do experiments on forecasting and other datasets.
+If you use this code in your research, please cite:
 
+```bibtex
+@inproceedings{min2025paralinguistics,
+  author    = {Do June Min and Ver{\'o}nica P{\'e}rez-Rosas and Kenneth Resnicow and Rada Mihalcea},
+  title     = {Speech-Integrated Modeling for Behavioral Coding in Counseling},
+  booktitle = {Proceedings of the 26th Annual Meeting of the Special Interest Group on Discourse and Dialogue (SIGDIAL 2025)},
+  year      = {2025},
+}
+```
 
-## Related Work
-- [Multimodal Automatic Coding of Client Behavior in Motivational Interviewing](https://dl.acm.org/doi/pdf/10.1145/3382507.3418853) 
-- 
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contact
+
+For questions or issues, please contact:
+- Do June Min: dojmin@umich.edu
+
+## Acknowledgments
+
+We thank the contributors to the AnnoMI dataset and the open-source community for the tools and models used in this research.

@@ -1,7 +1,129 @@
-data/
-old/
-ref/
-model/
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyTorch
+*.pth
+*.pt
+*.bin
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and databases
+logs/
+*.log
+*.sqlite3
+*.db
+
+# Experiment outputs
 experiment/
-assets/
+speech_mi_logs/
+checkpoints/
+results/
+outputs/
+
+# Audio files
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.ogg
+
+# Large data files
+*.json.gz
+*.pkl
+*.pickle
+*.npy
+*.npz
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Cache
+.cache/
+*.cache
+
+# Tensorboard
+runs/
+tensorboard_logs/
+
+# Hugging Face cache
+.cache/huggingface/
+
+# Model weights (except specific ones)
+*.safetensors
+speech_llm_audio_encoder.pt
+
+# Specific to this project
+data/audio_files/
+data/processed/
+data/raw/
